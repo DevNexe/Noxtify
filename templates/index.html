@@ -1,5 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
+<section class="section" id="section-playlists" style="display:none">
+  <div class="playlist-header">
+    <h2 class="section-title" id="playlists-title">Плейлисты</h2>
+    <button class="btn-outline" id="btn-new-playlist">Новый плейлист</button>
+  </div>
+  <div id="playlist-list" class="playlist-list"></div>
+</section>
+
+<section class="section" id="section-playlist" style="display:none">
+  <div class="playlist-header">
+    <button class="btn-link" id="btn-back-to-playlists">← Плейлисты</button>
+    <div>
+      <h2 class="section-title" id="playlist-name">Плейлист</h2>
+      <p class="section-sub" id="playlist-count">0 треков</p>
+    </div>
+  </div>
+  <div class="track-table">
+    <div class="track-header">
+      <span class="c-num">#</span>
+      <span class="c-info">Title</span>
+      <span class="c-like">Liked</span>
+      <span class="c-dur">Duration</span>
+      <span class="c-menu"></span>
+    </div>
+    <div id="playlist-track-list"></div>
+  </div>
+</section>
+
 <div id="legacy-drop-zone" hidden>
   <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
     <circle cx="24" cy="24" r="22"/>

@@ -305,6 +305,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
+  margin-bottom: 6px;
   cursor: pointer;
   transition: transform .15s, background .15s;
 }

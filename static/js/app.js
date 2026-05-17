@@ -32,6 +32,11 @@ const audio = new Audio();
 audio.preload = "metadata";
 
 // ── API ────────────────────────────────────────────────────────────
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("noxtify_token");
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 const api = {
   async getTracks(q = "", filters = {}) {
     const params = new URLSearchParams({
@@ -42,25 +47,35 @@ const api = {
     });
     if (filters.artist) params.set("artist", filters.artist);
     if (filters.genre) params.set("genre", filters.genre);
-    const r = await fetch(`/api/v1/tracks?${params.toString()}`);
+    const r = await fetch(`/api/v1/tracks?${params.toString()}`, {
+      headers: getAuthHeaders()
+    });
     return r.json();
   },
   async getTrack(id) {
-    const r = await fetch(`/api/v1/tracks/${id}`);
+    const r = await fetch(`/api/v1/tracks/${id}`, {
+      headers: getAuthHeaders()
+    });
     return r.json();
   },
   async upload(fd) {
-    const r = await fetch("/api/v1/tracks", { method: "POST", body: fd });
+    const r = await fetch("/api/v1/tracks", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: fd
+    });
     return r.json();
   },
   async getPlaylists() {
-    const r = await fetch("/api/v1/playlists");
+    const r = await fetch("/api/v1/playlists", {
+      headers: getAuthHeaders()
+    });
     return r.json();
   },
   async createPlaylist(name) {
     const r = await fetch("/api/v1/playlists", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-User-Id": USER_ID },
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ name })
     });
     return r.json();
@@ -68,13 +83,13 @@ const api = {
   async recordPlay(track_id) {
     return fetch("/api/v1/history", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-User-Id": USER_ID },
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ track_id })
     });
   },
   async getHistory(limit = 100, offset = 0) {
     const r = await fetch(`/api/v1/history?limit=${limit}&offset=${offset}`, {
-      headers: { "X-User-Id": USER_ID }
+      headers: getAuthHeaders()
     });
     return r.json();
   },
@@ -82,7 +97,7 @@ const api = {
     if (!track_id) throw new Error("Track ID is missing");
     const r = await fetch(`/api/v1/playlists/${pl_id}/tracks`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-User-Id": USER_ID },
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ track_id })
     });
     if (!r.ok) {
@@ -91,7 +106,12 @@ const api = {
     }
     return r.json();
   },
-  async del(id) { return fetch(`/api/v1/tracks/${id}`, { method: "DELETE" }); },
+  async del(id) { 
+    return fetch(`/api/v1/tracks/${id}`, { 
+      method: "DELETE",
+      headers: getAuthHeaders()
+    }); 
+  },
   download: id => `/api/v1/download/${id}`,
   stream: id => `/api/v1/stream/${id}`,
   cover:  id => id ? `/api/v1/covers/${id}` : null,
@@ -433,10 +453,10 @@ function toggleDropdown(id) {
 // ── Track list ─────────────────────────────────────────────────────
 async function loadTracks(q = "") {
   const allRes = await api.getTracks("");
-  S.allTracks = allRes.tracks || [];
+  S.allTracks = (allRes && allRes.tracks) || [];
   renderFilters();
   const res = await api.getTracks(q, S.filters);
-  S.tracks = res.tracks;
+  S.tracks = (res && res.tracks) || [];
   if (S.page === "playlist" && S.currentPlaylist) {
     renderTracks(getPlaylistTracks(S.currentPlaylist), "playlist-track-list");
   } else {
@@ -448,7 +468,7 @@ async function loadTracks(q = "") {
 function renderTracks(tracks, targetId = "track-list") {
   const list = $(targetId);
   if (!list) return;
-  if (!tracks.length) {
+  if (!tracks || !Array.isArray(tracks) || !tracks.length) {
     list.innerHTML = `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>
       <p>${t("tracks.emptyTitle")}</p><small>${t("tracks.emptySubtitle")}</small>
@@ -610,19 +630,23 @@ async function restoreSession() {
   try {
     const state = JSON.parse(saved);
     if (state.filters) S.filters = state.filters;
-    if (state.page) showSection(state.page);
     if (state.queue && state.queue.length && state.qi !== -1) {
-      S.queue = state.queue; S.qi = state.qi;
+      S.queue = state.queue;
+      S.qi = state.qi;
       const track = S.queue[S.qi];
       if (track) {
         audio.src = api.stream(track.id);
         audio.currentTime = state.currentTime || 0;
         audio.volume = state.volume || 1;
+        $("volume-slider").value = audio.volume * 100;
+        updateRangeFill($("volume-slider"));
         renderNowPlaying(track);
         syncPlayBtn();
       }
     }
-  } catch (e) { console.error("Session restore failed", e); }
+  } catch (e) {
+    console.error("Session restore failed", e);
+  }
 }
 
 
@@ -676,17 +700,11 @@ function renderPlaylists() {
 
 async function loadPlaylists() {
   const res = await api.getPlaylists();
-  S.playlists = res.playlists || [];
+  S.playlists = (res && res.playlists) || [];
   renderPlaylists();
 }
 
 function navigateTo(path, replace = false) {
-  const needsReload = path === "/" || path === "/history" || path.startsWith("/playlists");
-  if (location.pathname !== path && needsReload) {
-    if (replace) location.replace(path);
-    else location.href = path;
-    return;
-  }
   if (replace) history.replaceState(null, "", path);
   else history.pushState(null, "", path);
   handleRoute(path);
@@ -724,26 +742,44 @@ function handleRoute(path = location.pathname) {
   showSection("tracks");
 }
 
-function openLibrary(replace = false) {
-  const route = "/playlists";
-  if (location.pathname !== route) {
-    location.href = route;
-    return;
+// ── Auth guard helper ──
+function requireAuth(callback) {
+  if (!Auth.user) {
+    Auth.showAuthModal();
+    return false;
   }
+  callback();
+  return true;
+}
+
+function openLibrary(replace = false) {
+  if (!requireAuth(() => {})) return;
+  
   showSection("playlists");
   renderPlaylists();
+  const route = "/playlists";
   if (replace) history.replaceState(null, "", route);
   else history.pushState(null, "", route);
 }
 
 function openHistory(replace = false) {
-  const route = "/history";
-  if (location.pathname !== route) {
-    location.href = route;
-    return;
-  }
+  if (!requireAuth(() => {})) return;
+  
   showSection("history");
   loadHistory();
+  const route = "/history";
+  if (replace) history.replaceState(null, "", route);
+  else history.pushState(null, "", route);
+}
+
+function openPlaylistView(playlist, replace = false) {
+  S.currentPlaylist = playlist;
+  showSection("playlist");
+  $("playlist-name").textContent = playlist.name;
+  const tracks = getPlaylistTracks(playlist);
+  $("playlist-count").textContent = `${tracks.length} ${trackWord(tracks.length)}`;
+  renderTracks(tracks, "playlist-track-list");
+  const route = playlist.id === "favorites" ? "/playlists/favorite" : `/playlists/${playlist.id}`;
   if (replace) history.replaceState(null, "", route);
   else history.pushState(null, "", route);
 }
@@ -752,28 +788,15 @@ function openFavorites(replace = false) {
   openPlaylistView({ id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(t => t.id) }, replace);
 }
 
-function openPlaylistView(playlist, replace = false) {
-  const route = playlist.id === "favorites" ? "/playlists/favorite" : `/playlists/${playlist.id}`;
-  if (location.pathname !== route) {
-    location.href = route;
-    return;
-  }
-  S.currentPlaylist = playlist;
-  showSection("playlist");
-  $("playlist-name").textContent = playlist.name;
-  const tracks = getPlaylistTracks(playlist);
-  $("playlist-count").textContent = `${tracks.length} ${trackWord(tracks.length)}`;
-  renderTracks(tracks, "playlist-track-list");
-  if (replace) {
-    history.replaceState(null, "", route);
-  } else {
-    history.pushState(null, "", route);
-  }
-}
 
 async function loadHistory() {
-  const res = await api.getHistory(100, 0);
-  renderHistory(res.history || []);
+  try {
+    const res = await api.getHistory(100, 0);
+    renderHistory((res && res.history) || []);
+  } catch (error) {
+    console.error("Failed to load history:", error);
+    renderHistory([]);
+  }
 }
 
 function renderHistory(history) {
@@ -1098,7 +1121,7 @@ $("add-playlist-backdrop")?.addEventListener("click", e => {
   if (e.target === $("add-playlist-backdrop")) closeAddToPlaylistPopup();
 });
 
-$("cm-play").addEventListener("click", () => {
+$("cm-play")?.addEventListener("click", () => {
   if (!ctxTarget) return;
   const tracks = libraryTracks();
   const idx = tracks.findIndex(t => t.id === ctxTarget);
@@ -1106,7 +1129,7 @@ $("cm-play").addEventListener("click", () => {
   closeCtxMenu();
 });
 
-$("cm-delete").addEventListener("click", async () => {
+$("cm-delete")?.addEventListener("click", async () => {
   if (!ctxTarget) return;
   const track = findTrackById(ctxTarget);
   if (!track || !confirm(`Удалить "${track.title}"?`)) return;
@@ -1136,6 +1159,10 @@ function setupUpload() {
 
   $("nav-upload")?.addEventListener("click", e => {
     e.preventDefault();
+    if (!Auth.user) {
+      Auth.showAuthModal();
+      return;
+    }
     resetUploadProgress();
     openUploadPopup();
   });
@@ -1192,15 +1219,17 @@ async function uploadFiles(files) {
 
 // ── Controls ───────────────────────────────────────────────────────
 function setupControls() {
-  $("btn-prev").onclick = playPrev;
-  $("btn-play").onclick = () => audio.paused ? audio.play() : audio.pause();
-  $("btn-next").onclick = playNext;
+  $("btn-prev")?.addEventListener && ($("btn-prev").onclick = playPrev);
+  $("btn-play")?.addEventListener && ($("btn-play").onclick = () => audio.paused ? audio.play() : audio.pause());
+  $("btn-next")?.addEventListener && ($("btn-next").onclick = playNext);
 
-  $("btn-shuffle").onclick = function() {
+  const btnShuffle = $("btn-shuffle");
+  if (btnShuffle) btnShuffle.onclick = function() {
     S.shuffle = !S.shuffle; this.classList.toggle("active", S.shuffle);
   };
 
-  $("btn-repeat").onclick = function() {
+  const btnRepeat = $("btn-repeat");
+  if (btnRepeat) btnRepeat.onclick = function() {
     const modes = ["none","all","one"];
     S.repeat = modes[(modes.indexOf(S.repeat) + 1) % 3];
     this.dataset.mode = S.repeat;
@@ -1214,14 +1243,15 @@ function setupControls() {
   });
 
   const vol = $("volume-slider");
-  vol.addEventListener("input", () => {
+  vol?.addEventListener("input", () => {
     audio.volume = vol.value / 100;
     updateRangeFill(vol);
+    syncStateToStorage(); // ← добавь сюда
   });
-  updateRangeFill(vol);
+  if (vol) updateRangeFill(vol);
 
   const pb = $("progress-bar");
-  pb.addEventListener("input", () => {
+  pb?.addEventListener("input", () => {
     audio.currentTime = (pb.value / 100) * (audio.duration || 0);
     updateRangeFill(pb);
   });
@@ -1280,7 +1310,7 @@ function setupHotkeys() {
 // ── Search ─────────────────────────────────────────────────────────
 function setupSearch() {
   let timer;
-  $("search-input").addEventListener("input", e => {
+  $("search-input")?.addEventListener("input", e => {
     clearTimeout(timer);
     timer = setTimeout(() => loadTracks(e.target.value), 280);
   });
@@ -1298,13 +1328,23 @@ function setupSearch() {
 document.addEventListener("DOMContentLoaded", async () => {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   await loadLanguage();
-  await Promise.all([loadTracks(), loadPlaylists()]);
-  setupUpload();
+  const authed = await Auth.init();
+  
+  // Only load tracks if authenticated
+  if (Auth.user) {
+    await Promise.all([loadTracks(), loadPlaylists()]);
+    setupUpload();
+  } else {
+    // Guest user - show auth modal and don't load private data
+    Auth.showAuthModal();
+  }
+  
   setupControls();
   setupSearch();
   setupHotkeys();
   setupNavigation();
   setupSettings();
+  await restoreSession(); // ← перенеси сюда, после загрузки треков
   handleRoute();
   window.addEventListener("popstate", () => handleRoute());
 });

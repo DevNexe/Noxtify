@@ -1,0 +1,19 @@
+/* ── Auth modal ── */
+.auth-modal {
+  width: min(400px, 100%);
+  animation: modal-in .2s ease;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Аватар в топбаре */
+.avatar {
+  cursor: pointer;
+  transition: box-shadow .15s;
+}
+.avatar:hover {
+  box-shadow: 0 0 0 2px var(--accent2);
+}

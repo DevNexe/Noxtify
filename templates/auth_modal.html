@@ -1,0 +1,89 @@
+<!-- ── Auth Modal ── -->
+<div id="auth-backdrop" class="modal-backdrop open" style="z-index:2000">
+  <div class="modal auth-modal" role="dialog" aria-modal="true">
+
+    <!-- Login -->
+    <div id="auth-login-view">
+      <div class="modal-header">
+        <h3>Добро пожаловать в Noxtify</h3>
+        <p style="color:var(--t3);font-size:13px;margin-top:4px">Войди чтобы слушать музыку</p>
+      </div>
+      <div id="auth-error" style="display:none;color:#f87171;font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(248,113,113,.1);border-radius:8px"></div>
+      <label class="modal-field">
+        <span>Email или имя пользователя</span>
+        <input type="text" id="login-field" autocomplete="username" placeholder="user@example.com"/>
+      </label>
+      <label class="modal-field">
+        <span>Пароль</span>
+        <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••"/>
+      </label>
+      <div class="modal-actions" style="flex-direction:column;gap:8px">
+        <button class="btn-primary" id="btn-do-login" style="width:100%;text-align:center">Войти</button>
+        <button class="btn-link" id="btn-go-register" style="font-size:13px">Нет аккаунта? Зарегистрироваться</button>
+      </div>
+    </div>
+
+    <!-- Register -->
+    <div id="auth-register-view" style="display:none">
+      <div class="modal-header">
+        <h3>Создать аккаунт</h3>
+      </div>
+      <div id="auth-reg-error" style="display:none;color:#f87171;font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(248,113,113,.1);border-radius:8px"></div>
+      <label class="modal-field">
+        <span>Имя пользователя</span>
+        <input type="text" id="reg-username" autocomplete="username" placeholder="cooluser"/>
+      </label>
+      <label class="modal-field">
+        <span>Email</span>
+        <input type="email" id="reg-email" autocomplete="email" placeholder="user@example.com"/>
+      </label>
+      <label class="modal-field">
+        <span>Пароль</span>
+        <input type="password" id="reg-password" autocomplete="new-password" placeholder="минимум 6 символов"/>
+      </label>
+      <div class="modal-actions" style="flex-direction:column;gap:8px">
+        <button class="btn-primary" id="btn-do-register" style="width:100%;text-align:center">Зарегистрироваться</button>
+        <button class="btn-link" id="btn-go-login" style="font-size:13px">Уже есть аккаунт? Войти</button>
+      </div>
+    </div>
+
+    <!-- Email verify notice -->
+    <div id="auth-verify-view" style="display:none;text-align:center;padding:12px 0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="color:var(--accent2);margin-bottom:12px">
+        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+      </svg>
+      <h3 style="margin-bottom:8px">Проверь почту</h3>
+      <p style="color:var(--t2);font-size:13px">Мы отправили письмо с подтверждением.<br>После верификации войди в аккаунт.</p>
+      <button class="btn-link" id="btn-verify-back" style="margin-top:16px;font-size:13px">← Войти</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Profile popup (топбар) ── -->
+<div id="profile-popup" style="
+  display:none;position:fixed;top:70px;right:16px;
+  background:var(--s1);border:1px solid var(--border);
+  border-radius:14px;padding:16px;min-width:220px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:1500
+">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <div class="avatar" id="profile-avatar" style="width:40px;height:40px;font-size:16px"></div>
+    <div>
+      <div id="profile-username" style="font-weight:700;font-size:14px"></div>
+      <div id="profile-email" style="font-size:12px;color:var(--t3)"></div>
+    </div>
+  </div>
+  <div style="height:1px;background:var(--border);margin-bottom:10px"></div>
+  <button id="btn-logout" style="
+    width:100%;text-align:left;padding:8px 10px;
+    border-radius:8px;font-size:13px;color:#f87171;
+    display:flex;align-items:center;gap:8px;
+    transition:background .15s;background:none;border:none;cursor:pointer
+  " onmouseover="this.style.background='rgba(248,113,113,.1)'" onmouseout="this.style.background='none'">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+    </svg>
+    Выйти
+  </button>
+</div>
