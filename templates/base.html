@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="theme-color" content="#a6a6a6"/>
+    <title>{% block title %}Noxtify{% endblock %}</title>
+    <link rel="manifest" href="/manifest.json"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='fonts/figtree.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"/>
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <header id="topbar">
+      <div class="topbar-left">
+        <button class="nav-arrow" id="btn-back">&#8249;</button>
+        <button class="nav-arrow" id="btn-fwd">&#8250;</button>
+      </div>
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search songs or artists"/>
+      </div>
+      <div class="topbar-right">
+        <div class="avatar" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="#888888"><path d="M234-276q51-39 114-61.5T480-360q69 0 132 22.5T726-276q35-41 54.5-93T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 59 19.5 111t54.5 93Zm146.5-204.5Q340-521 340-580t40.5-99.5Q421-720 480-720t99.5 40.5Q620-639 620-580t-40.5 99.5Q539-440 480-440t-99.5-40.5ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm100-95.5q47-15.5 86-44.5-39-29-86-44.5T480-280q-53 0-100 15.5T294-220q39 29 86 44.5T480-160q53 0 100-15.5ZM523-537q17-17 17-43t-17-43q-17-17-43-17t-43 17q-17 17-17 43t17 43q17 17 43 17t43-17Zm-43-43Zm0 360Z"/></svg></div>
+      </div>
+    </header>
+    <div id="layout">
+      <nav id="sidebar">
+        <div class="sidebar-top">
+          <button id="nav-home" class="sidebar-icon active" data-tip="Главная">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </button>
+          <button id="nav-library" class="sidebar-icon" data-tip="Библиотека">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </button>
+          <button id="nav-history" class="sidebar-icon" data-tip="История">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </button>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="sidebar-icon" id="nav-upload" data-tip="Загрузить">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </button>
+          <button class="sidebar-icon" id="nav-settings" data-tip="Настройки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </nav>
+      <main id="main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    <footer id="player-bar">
+      <div class="np-left">
+        <div class="np-cover">
+          <img id="np-cover" src="" alt="" style="display:none"/>
+          <div id="np-placeholder">
+            <svg xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="#666666"><path d="M287-167q-47-47-47-113t47-113q47-47 113-47 23 0 42.5 5.5T480-418v-422h240v160H560v400q0 66-47 113t-113 47q-66 0-113-47Z"/></svg>
+          </div>
+        </div>
+        <div class="np-meta">
+          <span id="np-title">Выбери трек</span>
+          <span id="np-artist">—</span>
+        </div>
+        <button class="like-btn" id="btn-like">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="17" height="17"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+      </div>
+
+      <div class="player-center">
+        <div class="ctrl-row">
+          <button class="ctrl-sm" id="btn-shuffle">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+          </button>
+          <button class="ctrl-md" id="btn-prev">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button class="ctrl-play" id="btn-play">
+            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="#000000">
+              <path d="M 320 -273 L 320 -687 C 320 -698.333 324 -707.833 332 -715.5 C 340 -723.167 349.333 -727 360 -727 C 363.333 -727 366.833 -726.5 370.5 -725.5 C 374.167 -724.5 377.667 -723 381 -721 L 707 -514 C 713 -510 717.5 -505 720.5 -499 C 723.5 -493 725 -486.667 725 -480 C 725 -473.333 723.5 -467 720.5 -461 C 717.5 -455 713 -450 707 -446 L 381 -239 C 377.667 -237 374.167 -235.5 370.5 -234.5 C 366.833 -233.5 363.333 -233 360 -233 C 349.333 -233 340 -236.833 332 -244.5 C 324 -252.167 320 -261.667 320 -273 Z M 400 -480 Z" style="fill: rgb(0, 0, 0);"/>
+            </svg>
+            <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <button class="ctrl-md" id="btn-next">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+          <button class="ctrl-sm" id="btn-repeat" data-mode="none">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+          </button>
+        </div>
+        <div class="progress-row">
+          <span id="time-current" class="t-lbl">0:00</span>
+          <input type="range" id="progress-bar" min="0" max="100" value="0" step="0.1"/>
+          <span id="time-duration" class="t-lbl">0:00</span>
+        </div>
+      </div>
+
+      <div class="player-right">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" style="color:var(--t2)"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <input type="range" id="volume-slider" min="0" max="100" value="100" step="1"/>
+      </div>
+    </footer>
+
+    <div id="toast-container"></div>
+
+    <div id="settings-backdrop" class="modal-backdrop">
+      <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+        <div class="modal-header">
+          <h3 id="settings-modal-title">Настройки</h3>
+        </div>
+        <label class="modal-field">
+          <span id="settings-language-label">Язык</span>
+          <select id="language-select">
+            <option value="ru" id="settings-lang-ru">Русский</option>
+            <option value="en" id="settings-lang-en">English</option>
+          </select>
+        </label>
+        <p class="settings-hint" id="settings-language-hint">Интерфейс переключится сразу и сохранится в браузере.</p>
+      </div>
+    </div>
+
+    <div id="upload-backdrop" class="modal-backdrop">
+      <div class="modal upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-modal-title">
+        <div class="modal-header">
+          <h3 id="upload-modal-title">Загрузить треки</h3>
+        </div>
+        <div id="drop-zone">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+            <circle cx="24" cy="24" r="22"/>
+            <path d="M24 14v14M16 20l8-8 8 8"/>
+            <path d="M14 34h20"/>
+          </svg>
+          <p>Перетащи треки сюда</p>
+          <small>MP3, FLAC, OGG, WAV, M4A</small>
+          <button type="button" class="btn-outline" id="btn-pick-files">Выбрать файлы</button>
+        </div>
+        <div id="upload-progress">
+          <div class="progress-label">Загрузка...</div>
+          <div class="progress-track"><div class="progress-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="metadata-modal-title">
+        <div class="modal-header">
+          <h3 id="metadata-modal-title">Редактировать метаданные</h3>
+        </div>
+        <form id="metadata-form">
+          <label class="modal-field">
+            Название
+            <input type="text" id="meta-title" required />
+          </label>
+          <label class="modal-field">
+            Исполнитель
+            <input type="text" id="meta-artist" required />
+          </label>
+          <label class="modal-field">
+            Альбом
+            <input type="text" id="meta-album" required />
+          </label>
+          <label class="modal-field">
+            Жанр
+            <input type="text" id="meta-genre" required />
+          </label>
+          <label class="modal-field">
+            Обложка
+            <input type="file" id="cover-input" accept="image/*" />
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="btn-outline" id="btn-metadata-cancel">Отмена</button>
+            <button type="submit" class="btn-primary">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="add-playlist-backdrop" class="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-playlist-title">
+        <div class="modal-header">
+          <h3 id="add-playlist-title">Добавить в плейлист</h3>
+        </div>
+        <div id="add-playlist-list" class="playlist-popup-list"></div>
+      </div>
+    </div>
+
+    <div id="ctx-menu">
+      {% block ctx %}{% endblock %}
+    </div>
+
+    <input type="file" id="file-input" accept=".mp3,.flac,.ogg,.wav,.m4a" multiple hidden/>
+
+    {% block scripts %}
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% endblock %}
+  </body>
+</html>
