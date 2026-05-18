@@ -73,6 +73,7 @@ def init_db():
                 genre      TEXT NOT NULL DEFAULT 'Unknown',
                 duration   INTEGER NOT NULL DEFAULT 0,
                 cover      TEXT,
+                public     INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL
             );
 
@@ -98,6 +99,11 @@ def init_db():
                 played_at  INTEGER NOT NULL
             );
         """)
+        # Add public column to tracks if it doesn't exist
+        try:
+            con.execute("ALTER TABLE tracks ADD COLUMN public INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass # Column already exists
 
 init_db()
 
@@ -124,14 +130,39 @@ def get_token():
 
 def resolve_user():
     token = get_token()
-    if not token:
-        return None
-    payload = decode_jwt(token)
-    if not payload:
-        return None
-    with _db_lock, get_db() as con:
-        user = con.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
-    return row_to_dict(user) if user else None
+    if token:
+        payload = decode_jwt(token)
+        if payload:
+            with _db_lock, get_db() as con:
+                user = con.execute("SELECT * FROM users WHERE id=?", (payload["sub"],)).fetchone()
+            if user:
+                user_dict = row_to_dict(user)
+                user_dict["is_guest"] = (user_dict["email"] or "").endswith("@noxtify.guest")
+                return user_dict
+    
+    # Guest support via X-User-Id header
+    guest_id = request.headers.get("X-User-Id")
+    if guest_id:
+        with _db_lock, get_db() as con:
+            user = con.execute("SELECT * FROM users WHERE id=?", (guest_id,)).fetchone()
+            if not user:
+                # Auto-create guest user record to satisfy foreign keys
+                now = int(time.time())
+                try:
+                    con.execute(
+                        "INSERT INTO users (id, username, email, password_hash, verified, created_at) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (guest_id, f"Guest_{guest_id[:8]}", f"{guest_id}@noxtify.guest", "guest_nopass", 1, now)
+                    )
+                    user = con.execute("SELECT * FROM users WHERE id=?", (guest_id,)).fetchone()
+                except sqlite3.Error:
+                    return None
+            
+            user_dict = row_to_dict(user)
+            user_dict["is_guest"] = True
+            return user_dict
+            
+    return None
 
 def auth_required(f):
     @wraps(f)
@@ -153,6 +184,11 @@ def optional_auth(f):
     return wrapper
 
 def is_track_public(con, track_id: str) -> bool:
+    # Check if the track itself is public
+    row = con.execute("SELECT public FROM tracks WHERE id = ?", (track_id,)).fetchone()
+    if row and row[0] == 1:
+        return True
+    # Or if it's in a public playlist
     row = con.execute(
         "SELECT 1 FROM playlist_tracks pt "
         "JOIN playlists p ON p.id = pt.playlist_id "
@@ -304,12 +340,22 @@ def get_tracks():
     order  = "DESC" if request.args.get("order", "desc") == "desc" else "ASC"
     limit  = min(int(request.args.get("limit", 100)), 500)
     offset = int(request.args.get("offset", 0))
-    uid    = request.current_user["id"]
+    
+    uid      = request.current_user["id"]
+    is_guest = request.current_user.get("is_guest", False)
+    
     allowed_sort = {"created_at", "title", "artist", "album", "genre", "duration"}
     if sort not in allowed_sort:
         sort = "created_at"
-    where  = ["user_id = ?"]
-    params = [uid]
+        
+    # All users see public tracks. Registered users also see their own private tracks.
+    if is_guest:
+        where = ["public = 1"]
+        params = []
+    else:
+        where  = ["(public = 1 OR user_id = ?)"]
+        params = [uid]
+        
     if q:
         pattern = f"%{q}%"
         where.append("(title LIKE ? OR artist LIKE ? OR genre LIKE ?)")
@@ -337,6 +383,11 @@ def get_track(track_id):
         row = con.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
         if not row:
             abort(404)
+        
+        # Guests can access any track since they can see all in the list
+        if request.current_user and request.current_user.get("is_guest"):
+            return jsonify(row_to_dict(row))
+            
         uid = request.current_user["id"] if request.current_user else None
         if row["user_id"] != uid and not is_track_public(con, track_id):
             abort(403)
@@ -346,6 +397,9 @@ def get_track(track_id):
 @app.route("/api/v1/tracks", methods=["POST"])
 @auth_required
 def upload_track():
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Registration required to upload"}), 403
+    
     if "file" not in request.files:
         return jsonify({"error": "No file"}), 400
     f   = request.files["file"]
@@ -364,24 +418,34 @@ def upload_track():
         val = request.form.get(field, "").strip()
         if val:
             meta[field] = val
+    # Check for public flag in form
+    is_public = request.form.get("public", "1") == "1"
+    
     now = int(time.time())
     with _db_lock, get_db() as con:
         con.execute(
-            "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, public, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (track_id, uid, filename, ext, meta["title"], meta["artist"],
-             meta["album"], meta["genre"], meta["duration"], meta["cover"], now)
+             meta["album"], meta["genre"], meta["duration"], meta["cover"], int(is_public), now)
         )
-    return jsonify({"id": track_id, **meta, "created_at": now}), 201
+    return jsonify({"id": track_id, **meta, "public": is_public, "created_at": now}), 201
 
 
 @app.route("/api/v1/tracks/<track_id>", methods=["PATCH"])
 @auth_required
 def update_track(track_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     data   = request.get_json(force=True)
-    fields = {k: data[k] for k in ("title", "artist", "album", "genre") if k in data}
+    fields = {k: data[k] for k in ("title", "artist", "album", "genre", "public") if k in data}
     if not fields:
         return jsonify({"error": "Nothing to update"}), 400
+    
+    # Cast public to int if present
+    if "public" in fields:
+        fields["public"] = int(bool(fields["public"]))
+        
     with _db_lock, get_db() as con:
         row = con.execute("SELECT * FROM tracks WHERE id=? AND user_id=?", (track_id, request.current_user["id"])).fetchone()
         if not row:
@@ -395,6 +459,8 @@ def update_track(track_id):
 @app.route("/api/v1/tracks/<track_id>", methods=["DELETE"])
 @auth_required
 def delete_track(track_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid = request.current_user["id"]
     with _db_lock, get_db() as con:
         row = con.execute("SELECT * FROM tracks WHERE id=? AND user_id=?", (track_id, uid)).fetchone()
@@ -486,6 +552,8 @@ def get_playlist(pl_id):
 @app.route("/api/v1/playlists", methods=["POST"])
 @auth_required
 def create_playlist():
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Registration required to create playlists"}), 403
     data   = request.get_json(force=True)
     raw    = uuid.uuid4().hex[:20]
     pl_id  = "-".join(raw[i:i+4] for i in range(0, 20, 4))
@@ -502,6 +570,8 @@ def create_playlist():
 @app.route("/api/v1/playlists/<pl_id>", methods=["PATCH"])
 @auth_required
 def update_playlist(pl_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid  = request.current_user["id"]
     data = request.get_json(force=True)
     with _db_lock, get_db() as con:
@@ -521,6 +591,8 @@ def update_playlist(pl_id):
 @app.route("/api/v1/playlists/<pl_id>/tracks", methods=["POST"])
 @auth_required
 def add_to_playlist(pl_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid      = request.current_user["id"]
     data     = request.get_json(force=True)
     track_id = data.get("track_id")
@@ -547,6 +619,8 @@ def add_to_playlist(pl_id):
 @app.route("/api/v1/playlists/<pl_id>/tracks/<track_id>", methods=["DELETE"])
 @auth_required
 def remove_from_playlist(pl_id, track_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid = request.current_user["id"]
     with _db_lock, get_db() as con:
         if not con.execute("SELECT 1 FROM playlists WHERE id=? AND user_id=?", (pl_id, uid)).fetchone():
@@ -563,6 +637,8 @@ def remove_from_playlist(pl_id, track_id):
 @app.route("/api/v1/playlists/<pl_id>", methods=["DELETE"])
 @auth_required
 def delete_playlist(pl_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid = request.current_user["id"]
     with _db_lock, get_db() as con:
         if not con.execute("SELECT 1 FROM playlists WHERE id=? AND user_id=?", (pl_id, uid)).fetchone():
@@ -613,9 +689,15 @@ def stream_track(track_id):
         row = con.execute("SELECT filename, user_id FROM tracks WHERE id=?", (track_id,)).fetchone()
         if not row:
             abort(404)
-        uid = request.current_user["id"] if request.current_user else None
-        if row["user_id"] != uid and not is_track_public(con, track_id):
-            abort(403)
+        
+        # Allow guests to stream any track
+        if request.current_user and request.current_user.get("is_guest"):
+            pass
+        else:
+            uid = request.current_user["id"] if request.current_user else None
+            if row["user_id"] != uid and not is_track_public(con, track_id):
+                abort(403)
+                
     path = TRACKS_DIR / row["user_id"] / row["filename"]
     if not path.exists():
         abort(404)
@@ -625,12 +707,20 @@ def stream_track(track_id):
 @app.route("/api/v1/download/<track_id>")
 @auth_required
 def download_track(track_id):
-    uid = request.current_user["id"]
     with _db_lock, get_db() as con:
-        row = con.execute("SELECT * FROM tracks WHERE id=? AND user_id=?", (track_id, uid)).fetchone()
+        row = con.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
     if not row:
         abort(404)
-    path = TRACKS_DIR / uid / row["filename"]
+        
+    uid = request.current_user["id"]
+    is_guest = request.current_user.get("is_guest", False)
+    
+    if not is_guest and row["user_id"] != uid:
+        with _db_lock, get_db() as con:
+            if not is_track_public(con, track_id):
+                abort(403)
+                
+    path = TRACKS_DIR / row["user_id"] / row["filename"]
     if not path.exists():
         abort(404)
     ext = Path(row["filename"]).suffix
@@ -645,20 +735,28 @@ def get_cover(cover_id):
         track = con.execute("SELECT id, user_id FROM tracks WHERE cover=?", (safe_id,)).fetchone()
     if not track:
         abort(404)
-    uid  = request.current_user["id"] if request.current_user else None
+        
+    # Allow guests to see any cover
+    if request.current_user and request.current_user.get("is_guest"):
+        pass
+    else:
+        uid  = request.current_user["id"] if request.current_user else None
+        if track["user_id"] != uid:
+            with _db_lock, get_db() as con:
+                if not is_track_public(con, track["id"]):
+                    abort(403)
+                    
     path = COVERS_DIR / track["user_id"] / f"{safe_id}.jpg"
     if not path.exists():
         abort(404)
-    if track["user_id"] != uid:
-        with _db_lock, get_db() as con:
-            if not is_track_public(con, track["id"]):
-                abort(403)
     return send_from_directory(path.parent.resolve(), path.name)
 
 
 @app.route("/api/v1/covers/<track_id>", methods=["POST"])
 @auth_required
 def upload_cover(track_id):
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Forbidden"}), 403
     uid = request.current_user["id"]
     with _db_lock, get_db() as con:
         row = con.execute("SELECT * FROM tracks WHERE id=? AND user_id=?", (track_id, uid)).fetchone()

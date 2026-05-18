@@ -33,8 +33,13 @@ audio.preload = "metadata";
 
 // ── API ────────────────────────────────────────────────────────────
 const getAuthHeaders = () => {
+  if (typeof Auth !== "undefined" && Auth.getAuthHeader) {
+    return Auth.getAuthHeader();
+  }
   const token = localStorage.getItem("noxtify_token");
-  return token ? { "Authorization": `Bearer ${token}` } : {};
+  if (token) return { "Authorization": `Bearer ${token}` };
+  const guestId = localStorage.getItem("noxtify_user_id");
+  return guestId ? { "X-User-Id": guestId } : {};
 };
 
 const api = {
@@ -753,8 +758,6 @@ function requireAuth(callback) {
 }
 
 function openLibrary(replace = false) {
-  if (!requireAuth(() => {})) return;
-  
   showSection("playlists");
   renderPlaylists();
   const route = "/playlists";
@@ -763,8 +766,6 @@ function openLibrary(replace = false) {
 }
 
 function openHistory(replace = false) {
-  if (!requireAuth(() => {})) return;
-  
   showSection("history");
   loadHistory();
   const route = "/history";
@@ -860,6 +861,7 @@ async function openMetadataModal(trackId) {
   $("meta-artist").value = track.artist;
   $("meta-album").value = track.album;
   $("meta-genre").value = track.genre || "Unknown";
+  if ($("meta-public")) $("meta-public").checked = track.public !== 0;
   $("cover-input").value = "";
   $("modal-backdrop").classList.add("open");
   S.editTargetId = trackId;
@@ -879,11 +881,12 @@ async function submitMetadataForm(event) {
   const artist = $("meta-artist").value.trim();
   const album = $("meta-album").value.trim();
   const genre = $("meta-genre").value.trim();
+  const isPublic = $("meta-public")?.checked ? 1 : 1;
 
   const res = await fetch(`/api/v1/tracks/${trackId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, artist, album, genre })
+    headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, artist, album, genre, public: isPublic })
   });
   const updated = await res.json();
 
@@ -916,6 +919,7 @@ function setupNavigation() {
   $("btn-fwd")?.addEventListener("click", () => window.history.forward());
   $("btn-back-to-playlists")?.addEventListener("click", openLibrary);
   $("btn-new-playlist")?.addEventListener("click", async () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
     const name = prompt("Имя плейлиста", "Новый плейлист");
     if (!name) return;
     const pl = await api.createPlaylist(name.trim() || "Новый плейлист");
@@ -930,6 +934,7 @@ function setupNavigation() {
     if (e.target === $("modal-backdrop")) closeMetadataModal();
   });
   $("cm-edit")?.addEventListener("click", async () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
     if (!ctxTarget) return;
     await openMetadataModal(ctxTarget);
     closeCtxMenu();
@@ -941,6 +946,7 @@ function setupNavigation() {
   });
 
   $("cm-add")?.addEventListener("click", () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
     const trackId = ctxTarget;
     closeCtxMenu();
     if (!trackId) return;
@@ -1130,6 +1136,7 @@ $("cm-play")?.addEventListener("click", () => {
 });
 
 $("cm-delete")?.addEventListener("click", async () => {
+  if (Auth.isGuest) { Auth.showAuthModal(); return; }
   if (!ctxTarget) return;
   const track = findTrackById(ctxTarget);
   if (!track || !confirm(`Удалить "${track.title}"?`)) return;
@@ -1330,14 +1337,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadLanguage();
   const authed = await Auth.init();
   
-  // Only load tracks if authenticated
-  if (Auth.user) {
-    await Promise.all([loadTracks(), loadPlaylists()]);
-    setupUpload();
-  } else {
-    // Guest user - show auth modal and don't load private data
-    Auth.showAuthModal();
-  }
+  // Load tracks and playlists for everyone (guest or registered)
+  await Promise.all([loadTracks(), loadPlaylists()]);
+  setupUpload();
   
   setupControls();
   setupSearch();

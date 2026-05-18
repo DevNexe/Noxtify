@@ -332,6 +332,17 @@ body {
   padding: 20px;
   z-index: 1001;
 }
+
+#reg-email,
+#reg-password,
+#login-password {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--t1);
+}
 .modal-backdrop.open { display: flex; }
 .modal {
   width: min(520px, 100%);

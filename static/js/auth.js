@@ -101,6 +101,14 @@ const Auth = {
     const btnVerifyBack = document.getElementById("btn-verify-back");
     if (btnVerifyBack) btnVerifyBack.addEventListener("click", () => this._showLoginView());
 
+    // Close modal on backdrop click
+    const authBackdrop = document.getElementById("auth-backdrop");
+    if (authBackdrop) {
+      authBackdrop.addEventListener("click", (e) => {
+        if (e.target === authBackdrop) this._closeAuthModal();
+      });
+    }
+
     // Allow Enter key to submit
     const loginField = document.getElementById("login-field");
     const loginPassword = document.getElementById("login-password");
@@ -386,10 +394,11 @@ const Auth = {
    * If guest: use guest ID
    */
   getAuthHeader() {
+    const headers = { "X-User-Id": this.guestId };
     if (this.token) {
-      return { Authorization: `Bearer ${this.token}` };
+      headers["Authorization"] = `Bearer ${this.token}`;
     }
-    return { "X-User-Id": this.guestId };
+    return headers;
   },
 
   /**
