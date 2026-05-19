@@ -2,21 +2,28 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"/>
     <meta name="theme-color" content="#a6a6a6"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="apple-mobile-web-app-title" content="Noxtify"/>
     <title>{% block title %}Noxtify{% endblock %}</title>
     <link rel="manifest" href="/manifest.json"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='fonts/figtree.css') }}"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}"/>
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/hamburger.js') }}"></script>
     {% block head %}{% endblock %}
   </head>
   <body>
     <header id="topbar">
       <div class="topbar-left">
-        <button class="nav-arrow" id="btn-back">&#8249;</button>
-        <button class="nav-arrow" id="btn-fwd">&#8250;</button>
+        <button class="hamburger-btn" id="btn-hamburger" aria-label="Меню">
+          <span></span>
+        </button>
+        <button class="nav-arrow" id="btn-back" aria-label="Назад">&#8249;</button>
+        <button class="nav-arrow" id="btn-fwd" aria-label="Вперед">&#8250;</button>
       </div>
       <div class="search-wrap">
         <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
@@ -30,38 +37,46 @@
     </header>
     <div id="layout">
       <nav id="sidebar">
+        <button class="hamburger-btn active" id="btn-sidebar-close" aria-label="Закрыть">
+          <span></span>
+        </button>
         <div class="sidebar-top">
-          <button id="nav-home" class="sidebar-icon active" data-tip="Главная">
+          <button id="nav-home" class="sidebar-icon active" data-tip="">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
+            <span class="sidebar-label"></span>
           </button>
-          <button id="nav-library" class="sidebar-icon" data-tip="Библиотека">
+          <button id="nav-library" class="sidebar-icon" data-tip="">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
             </svg>
+            <span class="sidebar-label"></span>
           </button>
-          <button id="nav-history" class="sidebar-icon" data-tip="История">
+          <button id="nav-history" class="sidebar-icon" data-tip="">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
               <circle cx="12" cy="12" r="10"></circle>
               <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
+            <span class="sidebar-label"></span>
           </button>
         </div>
         <div class="sidebar-bottom">
-          <button class="sidebar-icon" id="nav-upload" data-tip="Загрузить">
+          <button class="sidebar-icon" id="nav-upload" data-tip="">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
+            <span class="sidebar-label"></span>
           </button>
-          <button class="sidebar-icon" id="nav-settings" data-tip="Настройки">
+          <button class="sidebar-icon" id="nav-settings" data-tip="">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
+            <span class="sidebar-label"></span>
           </button>
         </div>
       </nav>

@@ -18,7 +18,7 @@
         <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••"/>
       </label>
       <div class="modal-actions" style="flex-direction:column;gap:8px">
-        <button class="btn-primary" id="btn-do-login" style="width:100%;text-align:center">Войти</button>
+        <button class="btn-outline" id="btn-do-login" style="width:100%;text-align:center">Войти</button>
         <button class="btn-link" id="btn-go-register" style="font-size:13px">Нет аккаунта? Зарегистрироваться</button>
       </div>
     </div>
@@ -42,19 +42,26 @@
         <input type="password" id="reg-password" autocomplete="new-password" placeholder="минимум 6 символов"/>
       </label>
       <div class="modal-actions" style="flex-direction:column;gap:8px">
-        <button class="btn-primary" id="btn-do-register" style="width:100%;text-align:center">Зарегистрироваться</button>
+        <button class="btn-outline" id="btn-do-register" style="width:100%;text-align:center">Зарегистрироваться</button>
         <button class="btn-link" id="btn-go-login" style="font-size:13px">Уже есть аккаунт? Войти</button>
       </div>
     </div>
 
-    <!-- Email verify notice -->
-    <div id="auth-verify-view" style="display:none;text-align:center;padding:12px 0">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="color:var(--accent2);margin-bottom:12px">
-        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-      </svg>
-      <h3 style="margin-bottom:8px">Проверь почту</h3>
-      <p style="color:var(--t2);font-size:13px">Мы отправили письмо с подтверждением.<br>После верификации войди в аккаунт.</p>
-      <button class="btn-link" id="btn-verify-back" style="margin-top:16px;font-size:13px">← Войти</button>
+    <div id="auth-verify-view" style="display:none">
+      <div class="modal-header">
+        <h3>Подтверждение email</h3>
+        <p style="color:var(--t3);font-size:13px;margin-top:4px">Введи 6-значный код из письма</p>
+      </div>
+      <div id="auth-verify-error" style="display:none;color:#f87171;font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(248,113,113,.1);border-radius:8px"></div>
+      <label class="modal-field">
+        <span>Код подтверждения</span>
+        <input type="text" id="verify-code" maxlength="6" placeholder="123456" 
+          style="font-size:24px;letter-spacing:8px;text-align:center"/>
+      </label>
+      <div class="modal-actions" style="flex-direction:column;gap:8px">
+        <button class="btn-outline" id="btn-do-verify" style="width:100%;text-align:center">Подтвердить</button>
+        <button class="btn-link" id="btn-verify-back" style="font-size:13px">← Назад</button>
+      </div>
     </div>
 
   </div>

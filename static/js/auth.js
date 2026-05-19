@@ -23,6 +23,7 @@ function _generateGuestId() {
 const Auth = {
   // ────── State ──────────────────────────────────────────────────────────────
   token: localStorage.getItem("noxtify_token"),
+  _pendingUserId: null,
   user: null,
   isGuest: !localStorage.getItem("noxtify_token"),
   guestId: localStorage.getItem("noxtify_user_id") || _generateGuestId(),
@@ -97,7 +98,7 @@ const Auth = {
     const btnLogout = document.getElementById("btn-logout");
     if (btnLogout) btnLogout.addEventListener("click", () => this.logout());
 
-    // Verify back button
+    // Перепиши обработчик btn-verify-back:
     const btnVerifyBack = document.getElementById("btn-verify-back");
     if (btnVerifyBack) btnVerifyBack.addEventListener("click", () => this._showLoginView());
 
@@ -119,6 +120,13 @@ const Auth = {
     const regEmail = document.getElementById("reg-email");
     const regPassword = document.getElementById("reg-password");
     if (regPassword) regPassword.addEventListener("keypress", (e) => e.key === "Enter" && this._handleRegister());
+
+    const btnVerify = document.getElementById("btn-do-verify");
+    if (btnVerify) btnVerify.addEventListener("click", () => this._handleVerify());
+
+    const verifyCode = document.getElementById("verify-code");
+    if (verifyCode) verifyCode.addEventListener("keypress", e => e.key === "Enter" && this._handleVerify());
+
   },
 
   // ────── Login ──────────────────────────────────────────────────────────────
@@ -198,7 +206,8 @@ const Auth = {
       if (res.ok) {
         const data = await res.json();
         if (this.config.require_email_verification) {
-          this._showVerificationNotice("Проверь свой email для подтверждения");
+          this._pendingUserId = data.user_id;
+          this._showVerifyView();
         } else {
           this._setAuth(data.token, data.user);
           this._closeAuthModal();
@@ -213,6 +222,43 @@ const Auth = {
       this._showError("auth-reg-error", "Ошибка соединения");
     } finally {
       if (regBtn) regBtn.disabled = false;
+    }
+  },
+
+  _showVerifyView() {
+    document.getElementById("auth-login-view").style.display = "none";
+    document.getElementById("auth-register-view").style.display = "none";
+    document.getElementById("auth-verify-view").style.display = "block";
+    setTimeout(() => document.getElementById("verify-code")?.focus(), 100);
+  },
+
+  async _handleVerify() {
+    const code = document.getElementById("verify-code")?.value.trim();
+    if (!code || code.length !== 6) {
+      this._showError("auth-verify-error", "Введи 6-значный код");
+      return;
+    }
+    const btn = document.getElementById("btn-do-verify");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/api/v1/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: this._pendingUserId, code })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        this._setAuth(data.token, data.user);
+        this._closeAuthModal();
+        window.location.reload();
+      } else {
+        const error = await res.json().catch(() => ({}));
+        this._showError("auth-verify-error", error.error || "Неверный код");
+      }
+    } catch {
+      this._showError("auth-verify-error", "Ошибка соединения");
+    } finally {
+      if (btn) btn.disabled = false;
     }
   },
 
@@ -315,11 +361,10 @@ const Auth = {
   },
 
   _showLoginView() {
-    const loginView = document.getElementById("auth-login-view");
-    const registerView = document.getElementById("auth-register-view");
-    if (loginView) loginView.style.display = "block";
-    if (registerView) registerView.style.display = "none";
-    document.getElementById("auth-error")?.style.display === "none";
+    document.getElementById("auth-login-view").style.display = "block";
+    document.getElementById("auth-register-view").style.display = "none";
+    document.getElementById("auth-verify-view").style.display = "none";
+    this._pendingUserId = null;
   },
 
   _showRegisterView() {

@@ -25,7 +25,7 @@ function generateUserId() {
 
 const USER_ID = localStorage.getItem("noxtify_user_id") || generateUserId();
 localStorage.setItem("noxtify_user_id", USER_ID);
-let currentLang = localStorage.getItem("noxtify_lang") || "ru";
+let currentLang = localStorage.getItem("noxtify_lang") || "en";
 let LANG = {};
 
 const audio = new Audio();
@@ -173,15 +173,22 @@ function applyTranslations() {
   const search = $("search-input");
   if (search) search.placeholder = t("search.placeholder");
 
-  const tips = [
+  const navItems = [
     ["nav-home", "nav.home"],
     ["nav-library", "nav.library"],
     ["nav-history", "nav.history"],
     ["nav-upload", "nav.upload"],
+    ["nav-settings", "nav.settings"],
   ];
-  tips.forEach(([id, key]) => { const el = $(id); if (el) el.dataset.tip = t(key); });
-  const settingsBtn = $("nav-settings") || document.querySelector("#sidebar .sidebar-bottom .sidebar-icon:not(#nav-upload)");
-  if (settingsBtn) settingsBtn.dataset.tip = t("nav.settings");
+  navItems.forEach(([id, key]) => {
+    const el = $(id);
+    if (el) {
+      const translated = t(key);
+      el.dataset.tip = translated;
+      const label = el.querySelector(".sidebar-label");
+      if (label) label.textContent = translated;
+    }
+  });
 
   setText("tracks-title", "home.topTracks");
   setText("artist-filter-label", "filters.artist");

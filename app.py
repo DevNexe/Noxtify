@@ -9,6 +9,7 @@ import sqlite3
 import bcrypt
 import jwt as pyjwt
 from functools import wraps
+import random
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,10 @@ def init_db():
             con.execute("ALTER TABLE tracks ADD COLUMN public INTEGER NOT NULL DEFAULT 1")
         except sqlite3.OperationalError:
             pass # Column already exists
+        try:
+            con.execute("ALTER TABLE users ADD COLUMN verify_token_exp INTEGER")
+        except sqlite3.OperationalError:
+            pass
 
 init_db()
 
@@ -199,20 +204,19 @@ def is_track_public(con, track_id: str) -> bool:
 
 # ── Email ─────────────────────────────────────────────────────────────────────
 
-def send_verification_email(to_email: str, username: str, token: str):
+def send_verification_email(to_email: str, username: str, code: str):
     if not SMTP_HOST or not SMTP_USER:
         return
     try:
-        base_url = request.host_url.rstrip("/")
-        link     = f"{base_url}/api/v1/auth/verify/{token}"
-        msg      = MIMEMultipart("alternative")
-        msg["Subject"] = "Подтверди email — Noxtify"
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Код подтверждения — Noxtify"
         msg["From"]    = f"{FROM_NAME} <{FROM_EMAIL}>"
         msg["To"]      = to_email
         html = f"""<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
           <h2>Привет, {username}!</h2>
-          <p>Нажми кнопку чтобы подтвердить email:</p>
-          <a href="{link}" style="display:inline-block;padding:12px 24px;background:#666;color:#fff;border-radius:8px;text-decoration:none">Подтвердить</a>
+          <p>Твой код подтверждения:</p>
+          <div style="font-size:36px;font-weight:700;letter-spacing:8px;padding:20px;background:#1a1a1a;color:#fff;border-radius:12px;text-align:center">{code}</div>
+          <p style="color:#888;font-size:13px;margin-top:12px">Код действителен 15 минут.</p>
         </div>"""
         msg.attach(MIMEText(html, "html"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
@@ -250,7 +254,6 @@ def extract_metadata(path: Path, user_id: str) -> dict:
     return meta
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
-
 @app.route("/api/v1/auth/register", methods=["POST"])
 def register():
     if not OPEN_REGISTRATION:
@@ -269,13 +272,14 @@ def register():
         return jsonify({"error": "Invalid email"}), 400
     pw_hash      = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     user_id      = str(uuid.uuid4())
-    verify_token = secrets.token_urlsafe(32) if REQUIRE_EMAIL_VERIFY else None
+    verify_token = str(random.randint(100000, 999999)) if REQUIRE_EMAIL_VERIFY else None
     now          = int(time.time())
     try:
         with _db_lock, get_db() as con:
+            verify_exp = now + 60 * 15  # 15 минут
             con.execute(
-                "INSERT INTO users (id, username, email, password_hash, verified, verify_token, created_at) VALUES (?,?,?,?,?,?,?)",
-                (user_id, username, email, pw_hash, 0 if REQUIRE_EMAIL_VERIFY else 1, verify_token, now)
+                "INSERT INTO users (id, username, email, password_hash, verified, verify_token, verify_token_exp, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (user_id, username, email, pw_hash, 0 if REQUIRE_EMAIL_VERIFY else 1, verify_token, verify_exp if REQUIRE_EMAIL_VERIFY else None, now)
             )
     except sqlite3.IntegrityError as e:
         if "username" in str(e):
@@ -283,10 +287,9 @@ def register():
         return jsonify({"error": "Email already registered"}), 409
     if REQUIRE_EMAIL_VERIFY and verify_token:
         send_verification_email(email, username, verify_token)
-        return jsonify({"message": "Check your email to verify."}), 201
+        return jsonify({"message": "Check your email", "user_id": user_id}), 201
     token = make_jwt(user_id)
     return jsonify({"token": token, "user": {"id": user_id, "username": username, "email": email}}), 201
-
 
 @app.route("/api/v1/auth/login", methods=["POST"])
 def login():
@@ -306,16 +309,24 @@ def login():
     token = make_jwt(user["id"])
     return jsonify({"token": token, "user": {"id": user["id"], "username": user["username"], "email": user["email"]}})
 
-
-@app.route("/api/v1/auth/verify/<token>")
-def verify_email(token):
+@app.route("/api/v1/auth/verify", methods=["POST"])
+def verify_email():
+    data    = request.get_json(force=True)
+    user_id = data.get("user_id", "").strip()
+    code    = data.get("code", "").strip()
+    if not user_id or not code:
+        return jsonify({"error": "Missing fields"}), 400
     with _db_lock, get_db() as con:
-        user = con.execute("SELECT * FROM users WHERE verify_token=?", (token,)).fetchone()
+        user = con.execute("SELECT * FROM users WHERE id=? AND verify_token=?", (user_id, code)).fetchone()
         if not user:
-            return "Invalid or expired token", 400
-        con.execute("UPDATE users SET verified=1, verify_token=NULL WHERE id=?", (user["id"],))
-    return "<h2 style='font-family:sans-serif'>Email подтверждён! <a href='/'>Войти</a></h2>"
-
+            return jsonify({"error": "Invalid code"}), 400
+        if user["verify_token_exp"] and int(time.time()) > user["verify_token_exp"]:
+            return jsonify({"error": "Code expired"}), 400
+        # Update user to verified
+        con.execute("UPDATE users SET verified=1, verify_token=NULL, verify_token_exp=NULL WHERE id=?", (user_id,))
+    
+    token = make_jwt(user_id)
+    return jsonify({"token": token, "user": {"id": user["id"], "username": user["username"], "email": user["email"]}})
 
 @app.route("/api/v1/auth/me")
 @auth_required
