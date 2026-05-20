@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#a6a6a6"/>
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Noxtify"/>
     <title>{% block title %}Noxtify{% endblock %}</title>
     <link rel="manifest" href="/manifest.json"/>
@@ -104,10 +105,10 @@
             <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
           </button>
           <button class="ctrl-play" id="btn-play">
-            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="#1a1a1a">
+            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" height="30px" viewBox="0 -960 960 960" width="30px" fill="currentColor">
               <path d="M 320 -273 L 320 -687 C 320 -698.333 324 -707.833 332 -715.5 C 340 -723.167 349.333 -727 360 -727 C 363.333 -727 366.833 -726.5 370.5 -725.5 C 374.167 -724.5 377.667 -723 381 -721 L 707 -514 C 713 -510 717.5 -505 720.5 -499 C 723.5 -493 725 -486.667 725 -480 C 725 -473.333 723.5 -467 720.5 -461 C 717.5 -455 713 -450 707 -446 L 381 -239 C 377.667 -237 374.167 -235.5 370.5 -234.5 C 366.833 -233.5 363.333 -233 360 -233 C 349.333 -233 340 -236.833 332 -244.5 C 324 -252.167 320 -261.667 320 -273 Z M 400 -480 Z"/>
             </svg>
-            <svg id="icon-pause" viewBox="0 0 24 24" fill="#1a1a1a" width="24" height="24" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" width="24" height="24" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
           </button>
           <button class="ctrl-md" id="btn-next">
             <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
@@ -131,22 +132,47 @@
 
     <div id="toast-container"></div>
 
+    <!-- Settings modal -->
     <div id="settings-backdrop" class="modal-backdrop">
       <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
         <div class="modal-header">
           <h3 id="settings-modal-title">Настройки</h3>
         </div>
-        <label class="modal-field">
+
+        <!-- Language -->
+        <div class="modal-field">
           <span id="settings-language-label">Язык</span>
-          <select id="language-select">
-            <option value="ru" id="settings-lang-ru">Русский</option>
-            <option value="en" id="settings-lang-en">English</option>
-          </select>
-        </label>
-        <p class="settings-hint" id="settings-language-hint">Интерфейс переключится сразу и сохранится в браузере.</p>
+          <div class="dropdown filter-dropdown" id="dropdown-settings-lang">
+            <button class="dropdown-trigger" onclick="toggleDropdown('dropdown-settings-lang')">
+              <span id="selected-lang">Русский</span>
+              <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="dropdown-menu" id="menu-settings-lang">
+              <button class="dropdown-item" id="settings-lang-ru" onclick="selectSettingsLang('ru')">Русский</button>
+              <button class="dropdown-item" id="settings-lang-en" onclick="selectSettingsLang('en')">English</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Theme -->
+        <div class="modal-field" style="margin-top:14px">
+          <span id="settings-theme-label">Тема</span>
+          <div class="dropdown filter-dropdown" id="dropdown-settings-theme">
+            <button class="dropdown-trigger" onclick="toggleDropdown('dropdown-settings-theme')">
+              <span id="selected-theme">Тёмная</span>
+              <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="dropdown-menu" id="menu-settings-theme">
+              <button class="dropdown-item" id="settings-theme-dark" onclick="selectTheme('dark')">Тёмная</button>
+              <button class="dropdown-item" id="settings-theme-light" onclick="selectTheme('light')">Светлая</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
+    <!-- Upload modal -->
     <div id="upload-backdrop" class="modal-backdrop">
       <div class="modal upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-modal-title">
         <div class="modal-header">
@@ -169,6 +195,7 @@
       </div>
     </div>
 
+    <!-- Metadata modal -->
     <div id="modal-backdrop" class="modal-backdrop">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="metadata-modal-title">
         <div class="modal-header">
@@ -207,6 +234,7 @@
       </div>
     </div>
 
+    <!-- Add to playlist modal -->
     <div id="add-playlist-backdrop" class="modal-backdrop">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-playlist-title">
         <div class="modal-header">

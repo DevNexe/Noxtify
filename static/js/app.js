@@ -31,6 +31,12 @@ let LANG = {};
 const audio = new Audio();
 audio.preload = "metadata";
 
+// ── Theme (apply early before DOM ready to avoid flash) ────────────
+(function() {
+  const saved = localStorage.getItem("noxtify_theme") || "dark";
+  if (saved === "light") document.documentElement.classList.add("light-theme-pending");
+})();
+
 // ── API ────────────────────────────────────────────────────────────
 const getAuthHeaders = () => {
   if (typeof Auth !== "undefined" && Auth.getAuthHeader) {
@@ -44,37 +50,22 @@ const getAuthHeaders = () => {
 
 const api = {
   async getTracks(q = "", filters = {}) {
-    const params = new URLSearchParams({
-      q,
-      sort: "created_at",
-      order: "desc",
-      limit: "500"
-    });
+    const params = new URLSearchParams({ q, sort: "created_at", order: "desc", limit: "500" });
     if (filters.artist) params.set("artist", filters.artist);
     if (filters.genre) params.set("genre", filters.genre);
-    const r = await fetch(`/api/v1/tracks?${params.toString()}`, {
-      headers: getAuthHeaders()
-    });
+    const r = await fetch(`/api/v1/tracks?${params.toString()}`, { headers: getAuthHeaders() });
     return r.json();
   },
   async getTrack(id) {
-    const r = await fetch(`/api/v1/tracks/${id}`, {
-      headers: getAuthHeaders()
-    });
+    const r = await fetch(`/api/v1/tracks/${id}`, { headers: getAuthHeaders() });
     return r.json();
   },
   async upload(fd) {
-    const r = await fetch("/api/v1/tracks", {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: fd
-    });
+    const r = await fetch("/api/v1/tracks", { method: "POST", headers: getAuthHeaders(), body: fd });
     return r.json();
   },
   async getPlaylists() {
-    const r = await fetch("/api/v1/playlists", {
-      headers: getAuthHeaders()
-    });
+    const r = await fetch("/api/v1/playlists", { headers: getAuthHeaders() });
     return r.json();
   },
   async createPlaylist(name) {
@@ -93,9 +84,7 @@ const api = {
     });
   },
   async getHistory(limit = 100, offset = 0) {
-    const r = await fetch(`/api/v1/history?limit=${limit}&offset=${offset}`, {
-      headers: getAuthHeaders()
-    });
+    const r = await fetch(`/api/v1/history?limit=${limit}&offset=${offset}`, { headers: getAuthHeaders() });
     return r.json();
   },
   async addToPlaylist(pl_id, track_id) {
@@ -111,15 +100,12 @@ const api = {
     }
     return r.json();
   },
-  async del(id) { 
-    return fetch(`/api/v1/tracks/${id}`, { 
-      method: "DELETE",
-      headers: getAuthHeaders()
-    }); 
+  async del(id) {
+    return fetch(`/api/v1/tracks/${id}`, { method: "DELETE", headers: getAuthHeaders() });
   },
   download: id => `/api/v1/download/${id}`,
-  stream: id => `/api/v1/stream/${id}`,
-  cover:  id => id ? `/api/v1/covers/${id}` : null,
+  stream:   id => `/api/v1/stream/${id}`,
+  cover:    id => id ? `/api/v1/covers/${id}` : null,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -195,8 +181,24 @@ function applyTranslations() {
   setText("settings-modal-title", "settings.title");
   setText("settings-language-label", "settings.language");
   setText("settings-language-hint", "settings.languageHint");
-  setText("settings-lang-ru", "settings.ru");
-  setText("settings-lang-en", "settings.en");
+  setText("settings-theme-label", "settings.theme");
+
+  // Update dropdown labels
+  const langEl = $("selected-lang");
+  if (langEl) langEl.textContent = currentLang === "ru" ? t("settings.ru") : t("settings.en");
+  const ruBtn = $("settings-lang-ru");
+  if (ruBtn) ruBtn.textContent = t("settings.ru");
+  const enBtn = $("settings-lang-en");
+  if (enBtn) enBtn.textContent = t("settings.en");
+
+  const savedTheme = localStorage.getItem("noxtify_theme") || "dark";
+  const themeEl = $("selected-theme");
+  if (themeEl) themeEl.textContent = savedTheme === "light" ? t("settings.themeLight") : t("settings.themeDark");
+  const darkBtn = $("settings-theme-dark");
+  if (darkBtn) darkBtn.textContent = t("settings.themeDark");
+  const lightBtn = $("settings-theme-light");
+  if (lightBtn) lightBtn.textContent = t("settings.themeLight");
+
   setText("upload-modal-title", "upload.title");
   setText("btn-pick-files", "upload.pick");
   setText("metadata-modal-title", S.editTargetId ? "metadata.editTitle" : "metadata.title", {
@@ -214,18 +216,7 @@ function applyTranslations() {
   const progressLabel = $("upload-progress")?.querySelector(".progress-label");
   if (progressLabel && $("upload-progress").style.display !== "block") progressLabel.textContent = t("upload.progress");
 
-  const metadataLabels = document.querySelectorAll("#metadata-form .modal-field span, #metadata-form .modal-field");
-  ["metadata.name", "metadata.artist", "metadata.album", "metadata.genre", "metadata.cover"].forEach((key, index) => {
-    const label = metadataLabels[index];
-    if (!label) return;
-    const textNode = [...label.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
-    if (textNode) textNode.textContent = `${t(key)}\n            `;
-  });
   document.querySelector("#metadata-form .btn-primary")?.replaceChildren(document.createTextNode(t("metadata.save")));
-
-  ["table.title", "table.liked", ""].forEach((key, index) => {
-    document.querySelectorAll(`.track-header span:nth-child(${index + 2})`).forEach(el => { el.textContent = t(key); });
-  });
 
   const homeSections = document.querySelectorAll("#section-recents, #section-history");
   if (homeSections[0]) {
@@ -243,8 +234,6 @@ function applyTranslations() {
   const ctxKeys = [["cm-play", "ctx.play"], ["cm-edit", "ctx.edit"], ["cm-download", "ctx.download"], ["cm-add", "ctx.add"], ["cm-delete", "ctx.delete"]];
   ctxKeys.forEach(([id, key]) => document.querySelectorAll(`#${id} .ctx-text`).forEach(el => { el.textContent = t(key); }));
 
-  const langSelect = $("language-select");
-  if (langSelect) langSelect.value = currentLang;
   renderFilters();
 }
 
@@ -268,6 +257,20 @@ function toast(msg, type = "info") {
   $("toast-container").appendChild(el);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("show")));
   setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 300); }, 2800);
+}
+
+// ── Theme ──────────────────────────────────────────────────────────
+function selectTheme(theme) {
+  localStorage.setItem("noxtify_theme", theme);
+  document.body.classList.toggle("light-theme", theme === "light");
+  document.querySelectorAll(".dropdown.open").forEach(d => d.classList.remove("open"));
+  const el = $("selected-theme");
+  if (el) el.textContent = t(theme === "light" ? "settings.themeLight" : "settings.themeDark");
+}
+
+function selectSettingsLang(lang) {
+  document.querySelectorAll(".dropdown.open").forEach(d => d.classList.remove("open"));
+  loadLanguage(lang).then(() => renderCurrentView());
 }
 
 // ── Player ─────────────────────────────────────────────────────────
@@ -356,7 +359,7 @@ function updateMediaSession(track) {
   navigator.mediaSession.setActionHandler("previoustrack", playPrev);
 }
 
-// ── Recents grid (last 6 played) ───────────────────────────────────
+// ── Recents grid ───────────────────────────────────────────────────
 let recentIds = JSON.parse(localStorage.getItem("recent") || "[]");
 
 function isHomeRoute() {
@@ -384,13 +387,8 @@ async function getRecentTracks() {
   try {
     const res = await api.getHistory(20, 0);
     (res.history || []).forEach(h => add({
-      id: h.track_id,
-      title: h.title,
-      artist: h.artist,
-      album: h.album,
-      genre: h.genre,
-      cover: h.cover,
-      duration: h.duration,
+      id: h.track_id, title: h.title, artist: h.artist,
+      album: h.album, genre: h.genre, cover: h.cover, duration: h.duration,
     }));
   } catch (error) {
     console.warn("Unable to load recents from history", error);
@@ -403,15 +401,9 @@ async function renderRecentCards() {
   const grid = $("recents-grid");
   const sec  = $("section-recents");
   if (!grid || !sec) return;
-  if (!isHomeRoute()) {
-    sec.style.display = "none";
-    return;
-  }
+  if (!isHomeRoute()) { sec.style.display = "none"; return; }
   const recent = await getRecentTracks();
-  if (!isHomeRoute()) {
-    sec.style.display = "none";
-    return;
-  }
+  if (!isHomeRoute()) { sec.style.display = "none"; return; }
   sec.style.display = "";
   if (!recent.length) {
     grid.innerHTML = `<div class="empty-state">
@@ -420,41 +412,38 @@ async function renderRecentCards() {
     </div>`;
     return;
   }
-  grid.innerHTML = recent.map(t => {
-    const url = api.cover(t.cover);
-    return `<div class="recent-card" data-id="${t.id}">
+  grid.innerHTML = recent.map(tr => {
+    const url = api.cover(tr.cover);
+    return `<div class="recent-card" data-id="${tr.id}">
       <div class="recent-cover">${url ? `<img src="${url}" alt="" loading="lazy"/>` : '<svg xmlns="http://www.w3.org/2000/svg" height="96px" viewBox="0 -960 960 960" width="96px" fill="#666666"><path d="M287-167q-47-47-47-113t47-113q47-47 113-47 23 0 42.5 5.5T480-418v-422h240v160H560v400q0 66-47 113t-113 47q-66 0-113-47Z"/></svg>'}</div>
       <div class="recent-info">
-        <div class="recent-title">${esc(t.title)}</div>
-        <div class="recent-artist">${esc(displayArtist(t.artist))}</div>
+        <div class="recent-title">${esc(tr.title)}</div>
+        <div class="recent-artist">${esc(displayArtist(tr.artist))}</div>
       </div>
     </div>`;
   }).join("");
   grid.querySelectorAll(".recent-card").forEach(card => {
     card.addEventListener("click", () => {
       const tracks = libraryTracks();
-      const t = tracks.find(x => x.id === card.dataset.id);
-      if (t) setQueue([...tracks], tracks.indexOf(t));
+      const tr = tracks.find(x => x.id === card.dataset.id);
+      if (tr) setQueue([...tracks], tracks.indexOf(tr));
     });
   });
 }
 
 function toggleDropdown(id) {
   const dropdown = document.getElementById(id);
-  const isOpen = dropdown.classList.contains('open');
-  
-  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
-  
+  const isOpen = dropdown.classList.contains("open");
+  document.querySelectorAll(".dropdown.open").forEach(d => d.classList.remove("open"));
   if (!isOpen) {
-    dropdown.classList.add('open');
-    
+    dropdown.classList.add("open");
     const closeHandler = (e) => {
       if (!dropdown.contains(e.target)) {
-        dropdown.classList.remove('open');
-        document.removeEventListener('click', closeHandler);
+        dropdown.classList.remove("open");
+        document.removeEventListener("click", closeHandler);
       }
     };
-    setTimeout(() => document.addEventListener('click', closeHandler), 1);
+    setTimeout(() => document.addEventListener("click", closeHandler), 1);
   }
 }
 
@@ -483,29 +472,26 @@ function renderTracks(tracks, targetId = "track-list") {
     </div>`;
     return;
   }
-  list.innerHTML = tracks.map((t, i) => {
-    if (!t.id) {
-      console.warn("renderTracks: skipping track without id", t);
-      return "";
-    }
-    const url = api.cover(t.cover);
-    const liked = S.likedIds.has(t.id);
-    return `<div class="track-row" data-id="${t.id}" data-idx="${i}">
+  list.innerHTML = tracks.map((tr, i) => {
+    if (!tr.id) return "";
+    const url = api.cover(tr.cover);
+    const liked = S.likedIds.has(tr.id);
+    return `<div class="track-row" data-id="${tr.id}" data-idx="${i}">
       <span class="tr-num">${i + 1}</span>
       <div class="tr-cover-wrap">
         <div class="tr-cover">${url ? `<img src="${url}" alt="" loading="lazy"/>` : '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#666666"><path d="M287-167q-47-47-47-113t47-113q47-47 113-47 23 0 42.5 5.5T480-418v-422h240v160H560v400q0 66-47 113t-113 47q-66 0-113-47Z"/></svg>'}</div>
         <div class="tr-meta">
-          <span class="tr-title">${esc(t.title)}</span>
-          <span class="tr-artist">${esc(displayArtist(t.artist))}</span>
+          <span class="tr-title">${esc(tr.title)}</span>
+          <span class="tr-artist">${esc(displayArtist(tr.artist))}</span>
         </div>
       </div>
-      <button class="tr-like${liked ? " liked" : ""}" data-id="${t.id}" aria-label="${tt("track.liked")}">
+      <button class="tr-like${liked ? " liked" : ""}" data-id="${tr.id}" aria-label="${tt("track.liked")}">
         <svg viewBox="0 0 24 24" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.8" width="20" height="20">
           <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
         </svg>
       </button>
-      <span class="tr-dur">${fmt(t.duration)}</span>
-      <button class="tr-menu" data-id="${t.id}" aria-label="${tt("track.menu")}">⋯</button>
+      <span class="tr-dur">${fmt(tr.duration)}</span>
+      <button class="tr-menu" data-id="${tr.id}" aria-label="${tt("track.menu")}">⋯</button>
     </div>`;
   }).join("");
 
@@ -519,66 +505,48 @@ function renderTracks(tracks, targetId = "track-list") {
   });
 
   list.querySelectorAll(".tr-menu").forEach(btn => {
-    if (!btn.dataset.id) {
-      console.warn("renderTracks: tr-menu button without data-id", btn.closest(".track-row"));
-      return;
-    }
     btn.addEventListener("click", e => { e.stopPropagation(); openCtxMenu(btn.dataset.id, btn); });
   });
 }
 
 function getFavoriteTracks() {
-  return libraryTracks().filter(t => S.likedIds.has(t.id));
+  return libraryTracks().filter(tr => S.likedIds.has(tr.id));
 }
 
 function getPlaylistTracks(playlist) {
   if (!playlist) return [];
   if (playlist.id === "favorites") return getFavoriteTracks();
-  return libraryTracks().filter(t => playlist.tracks?.includes(t.id));
+  return libraryTracks().filter(tr => playlist.tracks?.includes(tr.id));
 }
 
 function renderFilters() {
   const tracks = S.allTracks.length ? S.allTracks : S.tracks;
-  
-  const artists = [...new Set(tracks.map(t => t.artist).filter(Boolean))].sort();
-  const genres  = [...new Set(tracks.map(t => t.genre).filter(Boolean))].sort();
+  const artists = [...new Set(tracks.map(tr => tr.artist).filter(Boolean))].sort();
+  const genres  = [...new Set(tracks.map(tr => tr.genre).filter(Boolean))].sort();
 
   const fillDropdown = (menuId, items, type, allLabelKey) => {
     const menu = $(menuId);
     if (!menu) return;
-    
     const allLabel = t(allLabelKey);
     let html = `<button class="dropdown-item" onclick="selectFilterOption('${type}', '', '${allLabel}')">${allLabel}</button>`;
-    
     items.forEach(item => {
-      const isSelected = S.filters[type] === item;
-      html += `
-        <button class="dropdown-item ${isSelected ? 'active' : ''}" onclick="selectFilterOption('${type}', '${escAttr(item)}', '${escAttr(item)}')">
-          ${esc(item)}
-        </button>`;
+      html += `<button class="dropdown-item${S.filters[type] === item ? " active" : ""}" onclick="selectFilterOption('${type}', '${escAttr(item)}', '${escAttr(item)}')">${esc(item)}</button>`;
     });
-    
     menu.innerHTML = html;
-    
     const selectedSpan = $(`selected-${type}`);
-    if (selectedSpan) {
-      selectedSpan.textContent = S.filters[type] || allLabel;
-    }
+    if (selectedSpan) selectedSpan.textContent = S.filters[type] || allLabel;
   };
 
-  fillDropdown('menu-artist', artists, 'artist', 'filters.allArtists');
-  fillDropdown('menu-genre', genres, 'genre', 'filters.allGenres');
+  fillDropdown("menu-artist", artists, "artist", "filters.allArtists");
+  fillDropdown("menu-genre", genres, "genre", "filters.allGenres");
 }
 
 function selectFilterOption(type, value, label) {
   S.filters[type] = value;
-  
   const selectedSpan = $(`selected-${type}`);
   if (selectedSpan) selectedSpan.textContent = label;
-  
-  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
-  
-  onSearch(); 
+  document.querySelectorAll(".dropdown.open").forEach(d => d.classList.remove("open"));
+  onSearch();
 }
 
 function showSection(section) {
@@ -602,30 +570,24 @@ function showSection(section) {
   updateSidebarActive(section);
 }
 
-/* ── Spotify-like State Sync ── */
-
 function syncStateToStorage() {
   const stateToSave = {
-    qi: S.qi,
-    queue: S.queue,
-    currentTime: audio.currentTime,
-    volume: audio.volume,
-    page: S.page,
-    currentPlaylist: S.currentPlaylist,
-    filters: S.filters
+    qi: S.qi, queue: S.queue,
+    currentTime: audio.currentTime, volume: audio.volume,
+    page: S.page, currentPlaylist: S.currentPlaylist, filters: S.filters
   };
-  localStorage.setItem('noxtify_session', JSON.stringify(stateToSave));
+  localStorage.setItem("noxtify_session", JSON.stringify(stateToSave));
 }
 
-audio.addEventListener('play', syncStateToStorage);
-audio.addEventListener('pause', syncStateToStorage);
-audio.addEventListener('timeupdate', () => {
+audio.addEventListener("play", syncStateToStorage);
+audio.addEventListener("pause", syncStateToStorage);
+audio.addEventListener("timeupdate", () => {
   updateProgress();
   if (Math.floor(audio.currentTime) % 5 === 0) syncStateToStorage();
 });
 
 async function restoreSession() {
-  const saved = localStorage.getItem('noxtify_session');
+  const saved = localStorage.getItem("noxtify_session");
   if (!saved) return;
   try {
     const state = JSON.parse(saved);
@@ -649,21 +611,13 @@ async function restoreSession() {
   }
 }
 
-
 function updateSidebarActive(section) {
-  document.querySelectorAll('.sidebar-icon').forEach(icon => {
-    icon.classList.remove('active');
-  });
-
-  let activeId = '';
-  if (section === 'tracks') activeId = 'nav-home';
-  if (section === 'playlists' || section === 'playlist') activeId = 'nav-library';
-  if (section === 'history') activeId = 'nav-history';
-
-  if (activeId) {
-    const activeIcon = document.getElementById(activeId);
-    if (activeIcon) activeIcon.classList.add('active');
-  }
+  document.querySelectorAll(".sidebar-icon").forEach(icon => icon.classList.remove("active"));
+  let activeId = "";
+  if (section === "tracks") activeId = "nav-home";
+  if (section === "playlists" || section === "playlist") activeId = "nav-library";
+  if (section === "history") activeId = "nav-history";
+  if (activeId) document.getElementById(activeId)?.classList.add("active");
 }
 
 function renderPlaylists() {
@@ -685,10 +639,7 @@ function renderPlaylists() {
   list.innerHTML = cards.join("");
   list.querySelectorAll(".playlist-card").forEach(card => {
     card.addEventListener("click", () => {
-      if (card.dataset.id === "favorites") {
-        openFavorites();
-        return;
-      }
+      if (card.dataset.id === "favorites") { openFavorites(); return; }
       const pl = S.playlists.find(x => x.id === card.dataset.id);
       if (pl) openPlaylistView(pl);
     });
@@ -709,42 +660,23 @@ function navigateTo(path, replace = false) {
 
 function handleRoute(path = location.pathname) {
   const normalized = path.replace(/\/+$/, "");
-  if (normalized === "" || normalized === "/") {
-    showSection("tracks");
-    return;
-  }
-  if (normalized === "/playlists") {
-    openLibrary(true);
-    return;
-  }
-  if (normalized === "/playlists/favorite") {
-    openFavorites(true);
-    return;
-  }
-  if (normalized === "/history") {
-    openHistory(true);
-    return;
-  }
+  if (normalized === "" || normalized === "/") { showSection("tracks"); return; }
+  if (normalized === "/playlists") { openLibrary(true); return; }
+  if (normalized === "/playlists/favorite") { openFavorites(true); return; }
+  if (normalized === "/history") { openHistory(true); return; }
   const match = normalized.match(/^\/playlists\/([a-f0-9]{4}(?:-[a-f0-9]{4}){4})$/i);
   if (match) {
     const id = match[1];
     const pl = id === "favorites"
-      ? { id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(t => t.id) }
+      ? { id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(tr => tr.id) }
       : S.playlists.find(x => x.id === id);
-    if (pl) {
-      openPlaylistView(pl, true);
-      return;
-    }
+    if (pl) { openPlaylistView(pl, true); return; }
   }
   showSection("tracks");
 }
 
-// ── Auth guard helper ──
 function requireAuth(callback) {
-  if (!Auth.user) {
-    Auth.showAuthModal();
-    return false;
-  }
+  if (!Auth.user) { Auth.showAuthModal(); return false; }
   callback();
   return true;
 }
@@ -778,9 +710,8 @@ function openPlaylistView(playlist, replace = false) {
 }
 
 function openFavorites(replace = false) {
-  openPlaylistView({ id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(t => t.id) }, replace);
+  openPlaylistView({ id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(tr => tr.id) }, replace);
 }
-
 
 async function loadHistory() {
   try {
@@ -803,10 +734,7 @@ function renderHistory(history) {
     return;
   }
   list.innerHTML = history.map((h, i) => {
-    if (!h.track_id) {
-      console.warn("renderHistory: skipping history item without track_id", h);
-      return "";
-    }
+    if (!h.track_id) return "";
     const url = api.cover(h.cover);
     const liked = S.likedIds.has(h.track_id);
     return `<div class="track-row" data-id="${h.track_id}" data-idx="${i}">
@@ -844,9 +772,7 @@ function renderHistory(history) {
 
 async function openMetadataModal(trackId) {
   let track = findTrackById(trackId);
-  if (!track) {
-    track = await api.getTrack(trackId).catch(() => null);
-  }
+  if (!track) track = await api.getTrack(trackId).catch(() => null);
   if (!track) return;
   $("metadata-modal-title").textContent = `Редактировать: ${track.title}`;
   $("meta-title").value = track.title;
@@ -868,20 +794,17 @@ async function submitMetadataForm(event) {
   event.preventDefault();
   const trackId = S.editTargetId;
   if (!trackId) return;
-
   const title = $("meta-title").value.trim();
   const artist = $("meta-artist").value.trim();
   const album = $("meta-album").value.trim();
   const genre = $("meta-genre").value.trim();
   const isPublic = $("meta-public")?.checked ? 1 : 1;
-
   const res = await fetch(`/api/v1/tracks/${trackId}`, {
     method: "PATCH",
     headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ title, artist, album, genre, public: isPublic })
   });
   const updated = await res.json();
-
   const coverFile = $("cover-input").files[0];
   if (coverFile) {
     const fd = new FormData();
@@ -890,14 +813,12 @@ async function submitMetadataForm(event) {
     const coverData = await coverRes.json();
     if (coverData.cover) updated.cover = coverData.cover;
   }
-
   await loadTracks();
   if (S.page === "history") await loadHistory();
   if (S.queue[S.qi] && S.queue[S.qi].id === trackId) {
     S.queue[S.qi] = updated;
     renderNowPlaying(updated);
   }
-
   closeMetadataModal();
   toast("Сохранено");
 }
@@ -925,42 +846,36 @@ function setupNavigation() {
   $("modal-backdrop")?.addEventListener("click", e => {
     if (e.target === $("modal-backdrop")) closeMetadataModal();
   });
-
 }
 
 function setupSettings() {
   const backdrop = $("settings-backdrop");
-  const btn = $("nav-settings") || document.querySelector("#sidebar .sidebar-bottom .sidebar-icon:not(#nav-upload)");
-  const select = $("language-select");
-  if (!backdrop || !btn || !select) return;
+  const btn = $("nav-settings");
+  if (!backdrop || !btn) return;
 
-  btn.id = "nav-settings";
   btn.addEventListener("click", () => {
-    select.value = currentLang;
     backdrop.classList.add("open");
   });
+
   backdrop.addEventListener("click", e => {
     if (e.target === backdrop) backdrop.classList.remove("open");
   });
-  select.addEventListener("change", async e => {
-    await loadLanguage(e.target.value);
-    renderCurrentView();
-  });
+
+  // Apply saved theme on startup
+  const savedTheme = localStorage.getItem("noxtify_theme") || "dark";
+  document.body.classList.toggle("light-theme", savedTheme === "light");
+  const themeEl = $("selected-theme");
+  if (themeEl) themeEl.textContent = savedTheme === "light" ? t("settings.themeLight") : t("settings.themeDark");
+
+  // Apply saved lang label
+  const langEl = $("selected-lang");
+  if (langEl) langEl.textContent = currentLang === "ru" ? t("settings.ru") : t("settings.en");
 }
 
 function renderCurrentView() {
-  if (S.page === "history") {
-    loadHistory();
-    return;
-  }
-  if (S.page === "playlists") {
-    renderPlaylists();
-    return;
-  }
-  if (S.page === "playlist" && S.currentPlaylist) {
-    openPlaylistView(S.currentPlaylist, true);
-    return;
-  }
+  if (S.page === "history") { loadHistory(); return; }
+  if (S.page === "playlists") { renderPlaylists(); return; }
+  if (S.page === "playlist" && S.currentPlaylist) { openPlaylistView(S.currentPlaylist, true); return; }
   renderTracks(S.tracks, "track-list");
   renderRecentCards();
 }
@@ -981,10 +896,7 @@ function toggleLike(id) {
 let ctxTarget = null;
 
 function openCtxMenu(trackId, anchor) {
-  if (!trackId) {
-    console.warn("openCtxMenu: missing trackId", anchor);
-    return;
-  }
+  if (!trackId) return;
   ctxTarget = trackId;
   const menu = $("ctx-menu");
   const rect = anchor.getBoundingClientRect();
@@ -1007,56 +919,10 @@ function openAddToPlaylistPopup(trackId) {
 }
 
 function closeAddToPlaylistPopup() {
-  const backdrop = $("add-playlist-backdrop");
-  if (!backdrop) return;
-  backdrop.classList.remove("open");
+  $("add-playlist-backdrop")?.classList.remove("open");
 }
 
 function renderAddToPlaylistPopup() {
-  const list = $("add-playlist-list");
-  if (!list) return;
-  const track = findTrackById(ctxTarget);
-  if (!track) {
-    list.innerHTML = `<div class="empty-state"><p>Трек не найден</p></div>`;
-    return;
-  }
-  if (!S.playlists.length) {
-    list.innerHTML = `<div class="empty-state"><p>Нет доступных плейлистов</p><small>Создай плейлист в библиотеке</small></div>`;
-    return;
-  }
-  list.innerHTML = S.playlists.map(pl => `
-    <button class="playlist-choice" type="button" data-id="${pl.id}">
-      <span>${esc(pl.name)}</span>
-      <small>${pl.tracks.length} трек${pl.tracks.length === 1 ? "" : "ов"}</small>
-    </button>
-  `).join("");
-  list.querySelectorAll(".playlist-choice").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const plId = btn.dataset.id;
-      if (!plId || !ctxTarget) {
-        console.warn("Add to playlist failed: missing data", { plId, ctxTarget });
-        if (!ctxTarget) {
-          toast("Не удалось добавить: трек не выбран", "error");
-        } else {
-          toast("Не удалось добавить: плейлист не выбран", "error");
-        }
-        return;
-      }
-      try {
-        await api.addToPlaylist(plId, ctxTarget);
-        closeAddToPlaylistPopup();
-        await loadPlaylists();
-        toast("Добавлено в плейлист");
-      } catch (error) {
-        console.error("Add to playlist failed", error);
-        const message = error?.message ? error.message : "ошибка сервера";
-        toast(`Не удалось добавить: ${message}`, "error");
-      }
-    });
-  });
-}
-
-function renderAddToPlaylistPopupTranslated() {
   const list = $("add-playlist-list");
   if (!list) return;
   const track = findTrackById(ctxTarget);
@@ -1094,24 +960,19 @@ function renderAddToPlaylistPopupTranslated() {
   });
 }
 
-renderAddToPlaylistPopup = renderAddToPlaylistPopupTranslated;
-
 $("add-playlist-backdrop")?.addEventListener("click", e => {
   if (e.target === $("add-playlist-backdrop")) closeAddToPlaylistPopup();
 });
 
-// ── Context menu handlers ──
 function setupContextMenu() {
-  // cm-play: воспроизведение трека
   $("cm-play")?.addEventListener("click", () => {
     if (!ctxTarget) return;
     const tracks = libraryTracks();
-    const idx = tracks.findIndex(t => t.id === ctxTarget);
+    const idx = tracks.findIndex(tr => tr.id === ctxTarget);
     if (idx >= 0) setQueue([...tracks], idx);
     closeCtxMenu();
   });
 
-  // cm-edit: редактирование метаданных (требует аккаунта)
   $("cm-edit")?.addEventListener("click", async () => {
     if (Auth.isGuest) { Auth.showAuthModal(); return; }
     if (!ctxTarget) return;
@@ -1119,19 +980,12 @@ function setupContextMenu() {
     closeCtxMenu();
   });
 
-  // cm-download: скачивание аудио (работает для всех)
   $("cm-download")?.addEventListener("click", async () => {
     if (!ctxTarget) return;
-    try {
-      const url = api.download(ctxTarget);
-      window.open(url, "_blank");
-    } catch (error) {
-      toast("Ошибка скачивания", "error");
-    }
+    try { window.open(api.download(ctxTarget), "_blank"); } catch { toast("Ошибка скачивания", "error"); }
     closeCtxMenu();
   });
 
-  // cm-add: добавление в плейлист (требует аккаунта)
   $("cm-add")?.addEventListener("click", () => {
     if (Auth.isGuest) { Auth.showAuthModal(); return; }
     if (!ctxTarget) return;
@@ -1139,7 +993,6 @@ function setupContextMenu() {
     openAddToPlaylistPopup(ctxTarget);
   });
 
-  // cm-delete: удаление трека (требует аккаунта)
   $("cm-delete")?.addEventListener("click", async () => {
     if (Auth.isGuest) { Auth.showAuthModal(); return; }
     if (!ctxTarget) return;
@@ -1155,12 +1008,10 @@ function setupContextMenu() {
     }
   });
 
-  // Закрытие модалки добавления в плейлист при клике на фон
   $("add-playlist-backdrop")?.addEventListener("click", e => {
     if (e.target === $("add-playlist-backdrop")) closeAddToPlaylistPopup();
   });
 }
-
 
 function setupUpload() {
   const zone  = $("drop-zone");
@@ -1179,31 +1030,18 @@ function setupUpload() {
     bar.style.display = "none";
   };
 
-  // Кнопка загрузки в попапе профиля
   $("btn-upload-from-profile")?.addEventListener("click", () => {
-    if (!Auth.user) {
-      Auth.showAuthModal();
-      return;
-    }
-    // Закрываем попап профиля
+    if (!Auth.user) { Auth.showAuthModal(); return; }
     const pp = $("profile-popup");
     if (pp) pp.style.display = "none";
     resetUploadProgress();
     openUploadPopup();
   });
 
-  $("btn-pick-files")?.addEventListener("click", e => {
-    e.stopPropagation();
-    input.click();
-  });
-  backdrop?.addEventListener("click", e => {
-    if (e.target === backdrop) closeUploadPopup();
-  });
+  $("btn-pick-files")?.addEventListener("click", e => { e.stopPropagation(); input.click(); });
+  backdrop?.addEventListener("click", e => { if (e.target === backdrop) closeUploadPopup(); });
 
-  zone.addEventListener("click", e => {
-    if (e.target.tagName === "BUTTON") return;
-    input.click();
-  });
+  zone.addEventListener("click", e => { if (e.target.tagName === "BUTTON") return; input.click(); });
   zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
   zone.addEventListener("drop", e => {
@@ -1244,9 +1082,9 @@ async function uploadFiles(files) {
 
 // ── Controls ───────────────────────────────────────────────────────
 function setupControls() {
-  $("btn-prev")?.addEventListener && ($("btn-prev").onclick = playPrev);
-  $("btn-play")?.addEventListener && ($("btn-play").onclick = () => audio.paused ? audio.play() : audio.pause());
-  $("btn-next")?.addEventListener && ($("btn-next").onclick = playNext);
+  $("btn-prev") && ($("btn-prev").onclick = playPrev);
+  $("btn-play") && ($("btn-play").onclick = () => audio.paused ? audio.play() : audio.pause());
+  $("btn-next") && ($("btn-next").onclick = playNext);
 
   const btnShuffle = $("btn-shuffle");
   if (btnShuffle) btnShuffle.onclick = function() {
@@ -1286,47 +1124,16 @@ function setupControls() {
 function setupHotkeys() {
   document.addEventListener("keydown", e => {
     if (e.target.matches("input, textarea")) return;
-
     switch (e.code) {
-      case "Space":
-        e.preventDefault();
-        audio.paused ? audio.play() : audio.pause();
-        break;
-      case "ArrowRight":
-        e.preventDefault();
-        audio.currentTime = Math.min(audio.currentTime + 5, audio.duration || 0);
-        break;
-      case "ArrowLeft":
-        e.preventDefault();
-        audio.currentTime = Math.max(audio.currentTime - 5, 0);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        audio.volume = Math.min(audio.volume + 0.1, 1);
-        $("volume-slider").value = audio.volume * 100;
-        updateRangeFill($("volume-slider"));
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        audio.volume = Math.max(audio.volume - 0.1, 0);
-        $("volume-slider").value = audio.volume * 100;
-        updateRangeFill($("volume-slider"));
-        break;
-      case "KeyN":
-        playNext();
-        break;
-      case "KeyP":
-        playPrev();
-        break;
-      case "KeyL": {
-        const cur = S.queue[S.qi];
-        if (cur) toggleLike(cur.id);
-        break;
-      }
-      case "KeyS":
-        S.shuffle = !S.shuffle;
-        $("btn-shuffle").classList.toggle("active", S.shuffle);
-        break;
+      case "Space": e.preventDefault(); audio.paused ? audio.play() : audio.pause(); break;
+      case "ArrowRight": e.preventDefault(); audio.currentTime = Math.min(audio.currentTime + 5, audio.duration || 0); break;
+      case "ArrowLeft": e.preventDefault(); audio.currentTime = Math.max(audio.currentTime - 5, 0); break;
+      case "ArrowUp": e.preventDefault(); audio.volume = Math.min(audio.volume + 0.1, 1); $("volume-slider").value = audio.volume * 100; updateRangeFill($("volume-slider")); break;
+      case "ArrowDown": e.preventDefault(); audio.volume = Math.max(audio.volume - 0.1, 0); $("volume-slider").value = audio.volume * 100; updateRangeFill($("volume-slider")); break;
+      case "KeyN": playNext(); break;
+      case "KeyP": playPrev(); break;
+      case "KeyL": { const cur = S.queue[S.qi]; if (cur) toggleLike(cur.id); break; }
+      case "KeyS": S.shuffle = !S.shuffle; $("btn-shuffle").classList.toggle("active", S.shuffle); break;
     }
   });
 }
@@ -1342,26 +1149,22 @@ function setupSearch() {
     clearTimeout(timer);
     timer = setTimeout(() => loadTracks(e.target.value), 280);
   });
-  $("artist-filter")?.addEventListener("change", e => {
-    S.filters.artist = e.target.value;
-    loadTracks($("search-input")?.value || "");
-  });
-  $("genre-filter")?.addEventListener("change", e => {
-    S.filters.genre = e.target.value;
-    loadTracks($("search-input")?.value || "");
-  });
 }
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+  // Apply theme immediately to avoid flash
+  const savedTheme = localStorage.getItem("noxtify_theme") || "dark";
+  document.body.classList.toggle("light-theme", savedTheme === "light");
+
   await loadLanguage();
   const authed = await Auth.init();
-  
+
   await Promise.all([loadTracks(), loadPlaylists()]);
   setupUpload();
   setupContextMenu();
-  
   setupControls();
   setupSearch();
   setupHotkeys();

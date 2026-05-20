@@ -862,7 +862,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   min-width: 180px;
 }
 
-/* Стили для элементов (общие для обоих типов меню) */
 .dropdown-item, .ctx-item {
   display: flex;
   align-items: center;
@@ -902,7 +901,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   margin: 6px 8px;
 }
 
-/* Опасные действия (Удаление) */
 .dropdown-item.danger, .ctx-item#cm-delete {
   color: #f87171;
 }
@@ -912,7 +910,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   color: #f87171;
 }
 
-/* Специфично для Dropdown в шапке */
 .dropdown { position: relative; display: inline-block; }
 .dropdown-trigger {
   background: var(--s2);
@@ -942,10 +939,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
 }
 .dropdown.open .dropdown-menu { opacity: 1; visibility: visible; transform: translateY(0); }
 
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* ── DESKTOP MODE (>768px): Sidebar Toggle ── */
-/* ════════════════════════════════════════════════════════════════════════════ */
-
 @media (min-width: 769px) {
   #sidebar {
     position: relative;
@@ -957,11 +950,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     transform: none;
     opacity: 1;
     box-shadow: none;
-  }
-
-  #sidebar.desktop-hidden {
-    /* We no longer use desktop-hidden for hiding completely on PC by default, 
-       but we keep it for now if needed. The user wants "collapsed" vs "expanded". */
   }
 
   .sidebar-top, .sidebar-bottom {
@@ -984,10 +972,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     margin: 8px;
   }
 }
-
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* ── TABLET MODE (480px - 768px): Sidebar Overlay ── */
-/* ════════════════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
   :root {
@@ -1031,7 +1015,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     font-size: 11px;
   }
 
-  /* Мобильный режим: сайдбар становится оверлеем и ВСЕГДА раскрыт (expanded) когда открыт */
   #sidebar {
     position: fixed;
     left: 8px;
@@ -1072,7 +1055,7 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   }
 
   #sidebar.desktop-hidden {
-    display: flex; /* Ensure it's not hidden on mobile if this class was somehow applied */
+    display: flex;
   }
 
   #layout {
@@ -1088,13 +1071,11 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     margin-bottom: 0;
   }
 
-  /* Recents grid adjustment */
   .recents-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 10px;
   }
 
-  /* Track table becomes compact */
   .track-header {
       display: grid !important;
       grid-template-columns: 40px 464px 32px !important;
@@ -1128,7 +1109,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     font-size: 11px;
   }
 
-  /* Player bar adjustments */
   #player-bar {
     margin: 8px;
     height: var(--player);
@@ -1176,7 +1156,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     width: 60px;
   }
 
-  /* Modal adjustments */
   .modal {
     width: min(90vw, 480px);
     padding: 20px;
@@ -1192,7 +1171,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     font-size: 12px;
   }
 
-  /* Toast positioning */
   #toast-container {
     bottom: calc(var(--player) + 8px);
     right: 8px;
@@ -1204,10 +1182,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     font-size: 12px;
   }
 }
-
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* ── MOBILE COMPACT (Ipad/Tablet Mode style for Mobile) ── */
-/* ════════════════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 480px) {
   :root {
@@ -1282,7 +1256,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     gap: 10px;
   }
 
-  /* ── ТАБЛИЦА ТРЕКОВ: Выравнивание строго в 1 линию ── */
   .track-header, .track-row {
       display: grid !important;
       grid-template-columns: 24px 150px 32px !important;
@@ -1301,12 +1274,10 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   .track-row:hover { background: var(--s2); }
   .track-row.active { background: rgb(82 82 107 / 12%); }
 
-  /* Скрываем колонку лайка, чтобы дать максимум места строке */
   .c-like {
     display: none !important;
   }
 
-  /* Заставляем внутренние элементы стоять в ряд */
   .c-num {
     display: flex !important;
     justify-content: center;
@@ -1314,41 +1285,36 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     font-size: 11px;
   }
 
-  /* ФИКС: Элемент с названием и автором принудительно делаем однострочным */
   .track-row .c-info {
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
     gap: 6px !important;
-    min-width: 0 !important; /* Запрещаем контейнеру расширять колонку грида */
+    min-width: 0 !important;
     width: 100% !important;
     overflow: hidden !important;
   }
 
-  /* Правила для названия и автора внутри .c-info */
   .track-row .c-info > * {
     display: block !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    min-width: 0 !important; /* Обязательно для работы троеточия у дочерних элементов */
+    min-width: 0 !important;
   }
 
-  /* Название трека (первый элемент) */
   .track-row .c-info > *:first-child {
     flex: 0 1 auto !important;
-    max-width: 55% !important; /* Ограничиваем, чтобы автору всегда оставалось место */
+    max-width: 55% !important;
     color: var(--t1);
   }
 
-  /* Автор (второй элемент) */
   .track-row .c-info > *:last-child {
     flex: 1 1 auto !important;
     color: var(--t2);
     font-size: 12px;
   }
   
-  /* Разделитель между названием и автором (если нужен) */
   .track-row .c-info > *:last-child::before {
     content: "• ";
     margin-right: 3px;
@@ -1366,25 +1332,21 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     justify-content: center;
   }
 
-  /* ── Нижня панель плеера ── */
-
   #player-bar {
     position: fixed;
     margin: 8px;
     border-radius: 12px;
-    height: auto !important; /* Высота подстроится сама под 2 строки */
+    height: auto !important;
     min-height: 84px;
     border: 1px solid var(--border);
     background: var(--s1);
     padding: 10px 12px !important;
-    
-    /* Только ROW и перенос строк */
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 12px 0 !important; /* 12px между строками */
+    gap: 12px 0 !important;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
@@ -1392,12 +1354,10 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     margin-bottom: 8px;
   }
 
-  /* Раскрываем центральный контейнер, чтобы таймлайн стал соседом кнопок в flex-сетке */
   .player-center {
     display: contents !important;
   }
 
-  /* [СТРОКА 1 - ЛЕВО]: Обложка и Метаданные */
   .np-left {
     display: flex !important;
     flex-direction: row !important;
@@ -1417,7 +1377,7 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
 
   .np-meta {
     display: flex !important;
-    flex-direction: row !important; /* Убрали column! Название и автор в линию */
+    flex-direction: row !important;
     align-items: center !important;
     gap: 6px !important;
     min-width: 0 !important;
@@ -1440,17 +1400,15 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
-    max-width: 45%; /* Чтобы автор не выдавил название */
+    max-width: 45%;
   }
 
-  /* Разделитель между названием и автором */
   #np-artist::before {
     content: "• ";
     margin-right: 2px;
     color: var(--t3);
   }
 
-  /* [СТРОКА 1 - ПРАВО]: Кнопки */
   .ctrl-row {
     display: flex !important;
     flex-direction: row !important;
@@ -1466,7 +1424,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     flex-shrink: 0;
   }
 
-  /* [СТРОКА 2 - ЛЕВО]: Таймлайн */
   .progress-row {
     display: flex !important;
     flex-direction: row !important;
@@ -1491,14 +1448,13 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     accent-color: var(--accent2) !important;
   }
 
-  /* [СТРОКА 2 - ПРАВО]: Громкость */
   .player-right {
     display: flex !important;
-    flex-direction: row !important; /* Строго ROW */
+    flex-direction: row !important;
     align-items: center !important;
     justify-content: flex-end !important;
     gap: 6px !important;
-    flex: 0 0 80px !important; /* Фиксированная ширина под ползунок */
+    flex: 0 0 80px !important;
     order: 2 !important;
   }
 
@@ -1520,7 +1476,6 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     margin-bottom: 56px;
   }
 
-  /* Модалки и фильтры */
   .modal-backdrop { padding: 16px; }
   .modal { width: 100%; padding: 20px; border-radius: 14px; }
   #toast-container { bottom: calc(var(--player) + 16px); right: 8px; left: 8px; }
@@ -1529,34 +1484,18 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
 }
 
 @keyframes fadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @keyframes slideInLeft {
-  from {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
 @keyframes slideOutLeft {
-  from {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
 }
 
 .modal-backdrop.open {
@@ -1602,11 +1541,9 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   overflow-y: auto;
 }
 
-/* Стили скроллбара для меню */
 .filter-dropdown .dropdown-menu::-webkit-scrollbar { width: 4px; }
 .filter-dropdown .dropdown-menu::-webkit-scrollbar-thumb { background: var(--s4); border-radius: 2px; }
 
-/* Sidebar overlay для мобильных */
 #sidebar-overlay {
   position: fixed;
   top: 0;
@@ -1616,4 +1553,52 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   background: rgba(0, 0, 0, 0.5);
   z-index: 100;
   animation: fadeIn 0.3s ease;
+}
+
+/* ── Light theme ── */
+body.light-theme {
+  --bg:      #d2d2d2;
+  --s1:      #ffffff;
+  --s2:      #e3e3e3;
+  --s3:      #d7d7d7;
+  --s4:      #ababab;
+  --accent:  #888888;
+  --accent2: #444444;
+  --t1:      #1a1a1a;
+  --t2:      #555555;
+  --t3:      #999999;
+  --border:  rgba(0,0,0,0.08);
+}
+
+body.light-theme .sidebar-icon.active {
+  background: rgb(82 82 107 / 23%);;
+}
+
+body.light-theme .hamburger-btn.active {
+  background: rgb(82 82 107 / 23%);;
+}
+
+body.light-theme .track-row.active .tr-title { color: #1a1a1a; }
+
+body.light-theme .ctrl-play {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+body.light-theme .ctrl-play:hover {
+  background: #444444;
+}
+
+body.light-theme #ctx-menu,
+body.light-theme .dropdown-menu {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+body.light-theme input[type=range] {
+  background: var(--s4);
+}
+
+body.light-theme #np-placeholder svg,
+body.light-theme .tr-cover svg,
+body.light-theme .recent-cover svg {
+  fill: #cccccc;
 }
