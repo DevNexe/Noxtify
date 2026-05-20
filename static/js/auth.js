@@ -310,6 +310,17 @@ const Auth = {
   },
 
   _showUserMenu() {
+    const btnProfileUpload = document.getElementById("btn-profile-upload");
+    if (btnProfileUpload) {
+      btnProfileUpload.onclick = () => {
+        profilePopup.style.display = "none";
+        if (!this.user) { this.showAuthModal(); return; }
+        const bar = document.getElementById("upload-progress");
+        if (bar) { bar.querySelector(".progress-fill").style.width = "0%"; bar.style.display = "none"; }
+        document.getElementById("upload-backdrop")?.classList.add("open");
+      };
+    }
+
     // Show profile popup menu
     const avatar = document.querySelector(".avatar");
     const profilePopup = document.getElementById("profile-popup");

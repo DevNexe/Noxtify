@@ -177,7 +177,6 @@ function applyTranslations() {
     ["nav-home", "nav.home"],
     ["nav-library", "nav.library"],
     ["nav-history", "nav.history"],
-    ["nav-upload", "nav.upload"],
     ["nav-settings", "nav.settings"],
   ];
   navItems.forEach(([id, key]) => {
@@ -277,7 +276,6 @@ function playTrack(track) {
   audio.load();
   audio.play().catch(() => {});
   S.playing = true;
-  // FIX: pushRecent теперь вызывается здесь — история обновляется при любом воспроизведении
   pushRecent(track.id);
   renderNowPlaying(track);
   updateMediaSession(track);
@@ -445,13 +443,11 @@ function toggleDropdown(id) {
   const dropdown = document.getElementById(id);
   const isOpen = dropdown.classList.contains('open');
   
-  // Закрываем все другие открытые dropdown
   document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
   
   if (!isOpen) {
     dropdown.classList.add('open');
     
-    // Обработчик для закрытия при клике вне
     const closeHandler = (e) => {
       if (!dropdown.contains(e.target)) {
         dropdown.classList.remove('open');
@@ -513,7 +509,6 @@ function renderTracks(tracks, targetId = "track-list") {
     </div>`;
   }).join("");
 
-  // FIX: один обработчик вместо двух конфликтующих
   list.querySelectorAll(".track-row").forEach(row => {
     row.addEventListener("click", e => {
       if (e.target.closest(".tr-menu")) return;
@@ -545,11 +540,9 @@ function getPlaylistTracks(playlist) {
 function renderFilters() {
   const tracks = S.allTracks.length ? S.allTracks : S.tracks;
   
-  // Собираем уникальные значения
   const artists = [...new Set(tracks.map(t => t.artist).filter(Boolean))].sort();
   const genres  = [...new Set(tracks.map(t => t.genre).filter(Boolean))].sort();
 
-  // Функция для отрисовки опций в кастомный dropdown
   const fillDropdown = (menuId, items, type, allLabelKey) => {
     const menu = $(menuId);
     if (!menu) return;
@@ -567,7 +560,6 @@ function renderFilters() {
     
     menu.innerHTML = html;
     
-    // Обновляем текст на кнопке
     const selectedSpan = $(`selected-${type}`);
     if (selectedSpan) {
       selectedSpan.textContent = S.filters[type] || allLabel;
@@ -578,18 +570,14 @@ function renderFilters() {
   fillDropdown('menu-genre', genres, 'genre', 'filters.allGenres');
 }
 
-// Новая функция для выбора опции
 function selectFilterOption(type, value, label) {
   S.filters[type] = value;
   
-  // Обновляем текст на кнопке
   const selectedSpan = $(`selected-${type}`);
   if (selectedSpan) selectedSpan.textContent = label;
   
-  // Закрываем dropdown
   document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
   
-  // Вызываем поиск/фильтрацию
   onSearch(); 
 }
 
@@ -663,18 +651,15 @@ async function restoreSession() {
 
 
 function updateSidebarActive(section) {
-  // Убираем active у всех иконок
   document.querySelectorAll('.sidebar-icon').forEach(icon => {
     icon.classList.remove('active');
   });
 
-  // Определяем, какую иконку подсветить
   let activeId = '';
   if (section === 'tracks') activeId = 'nav-home';
   if (section === 'playlists' || section === 'playlist') activeId = 'nav-library';
   if (section === 'history') activeId = 'nav-history';
 
-  // Добавляем active нужной иконке
   if (activeId) {
     const activeIcon = document.getElementById(activeId);
     if (activeIcon) activeIcon.classList.add('active');
@@ -940,25 +925,7 @@ function setupNavigation() {
   $("modal-backdrop")?.addEventListener("click", e => {
     if (e.target === $("modal-backdrop")) closeMetadataModal();
   });
-  $("cm-edit")?.addEventListener("click", async () => {
-    if (Auth.isGuest) { Auth.showAuthModal(); return; }
-    if (!ctxTarget) return;
-    await openMetadataModal(ctxTarget);
-    closeCtxMenu();
-  });
-  $("cm-download")?.addEventListener("click", () => {
-    if (!ctxTarget) return;
-    window.open(api.download(ctxTarget), "_blank");
-    closeCtxMenu();
-  });
 
-  $("cm-add")?.addEventListener("click", () => {
-    if (Auth.isGuest) { Auth.showAuthModal(); return; }
-    const trackId = ctxTarget;
-    closeCtxMenu();
-    if (!trackId) return;
-    openAddToPlaylistPopup(trackId);
-  });
 }
 
 function setupSettings() {
@@ -998,7 +965,6 @@ function renderCurrentView() {
   renderRecentCards();
 }
 
-// FIX: убрана мёртвая переменная currentTitle
 function toggleLike(id) {
   if (S.likedIds.has(id)) S.likedIds.delete(id);
   else S.likedIds.add(id);
@@ -1134,26 +1100,68 @@ $("add-playlist-backdrop")?.addEventListener("click", e => {
   if (e.target === $("add-playlist-backdrop")) closeAddToPlaylistPopup();
 });
 
-$("cm-play")?.addEventListener("click", () => {
-  if (!ctxTarget) return;
-  const tracks = libraryTracks();
-  const idx = tracks.findIndex(t => t.id === ctxTarget);
-  if (idx >= 0) setQueue([...tracks], idx);
-  closeCtxMenu();
-});
+// ── Context menu handlers ──
+function setupContextMenu() {
+  // cm-play: воспроизведение трека
+  $("cm-play")?.addEventListener("click", () => {
+    if (!ctxTarget) return;
+    const tracks = libraryTracks();
+    const idx = tracks.findIndex(t => t.id === ctxTarget);
+    if (idx >= 0) setQueue([...tracks], idx);
+    closeCtxMenu();
+  });
 
-$("cm-delete")?.addEventListener("click", async () => {
-  if (Auth.isGuest) { Auth.showAuthModal(); return; }
-  if (!ctxTarget) return;
-  const track = findTrackById(ctxTarget);
-  if (!track || !confirm(`Удалить "${track.title}"?`)) return;
-  await api.del(ctxTarget);
-  closeCtxMenu();
-  loadTracks();
-  toast("Трек удалён");
-});
+  // cm-edit: редактирование метаданных (требует аккаунта)
+  $("cm-edit")?.addEventListener("click", async () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
+    if (!ctxTarget) return;
+    await openMetadataModal(ctxTarget);
+    closeCtxMenu();
+  });
 
-// ── Upload ─────────────────────────────────────────────────────────
+  // cm-download: скачивание аудио (работает для всех)
+  $("cm-download")?.addEventListener("click", async () => {
+    if (!ctxTarget) return;
+    try {
+      const url = api.download(ctxTarget);
+      window.open(url, "_blank");
+    } catch (error) {
+      toast("Ошибка скачивания", "error");
+    }
+    closeCtxMenu();
+  });
+
+  // cm-add: добавление в плейлист (требует аккаунта)
+  $("cm-add")?.addEventListener("click", () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
+    if (!ctxTarget) return;
+    closeCtxMenu();
+    openAddToPlaylistPopup(ctxTarget);
+  });
+
+  // cm-delete: удаление трека (требует аккаунта)
+  $("cm-delete")?.addEventListener("click", async () => {
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
+    if (!ctxTarget) return;
+    const track = findTrackById(ctxTarget);
+    if (!track || !confirm(`Удалить "${track.title}"?`)) return;
+    try {
+      await api.del(ctxTarget);
+      closeCtxMenu();
+      await loadTracks();
+      toast("Трек удалён");
+    } catch (error) {
+      toast(`Ошибка удаления: ${error.message || "неизвестная ошибка"}`, "error");
+    }
+  });
+
+  // Закрытие модалки добавления в плейлист при клике на фон
+  $("add-playlist-backdrop")?.addEventListener("click", e => {
+    if (e.target === $("add-playlist-backdrop")) closeAddToPlaylistPopup();
+  });
+}
+
+
 function setupUpload() {
   const zone  = $("drop-zone");
   const input = $("file-input");
@@ -1171,15 +1179,19 @@ function setupUpload() {
     bar.style.display = "none";
   };
 
-  $("nav-upload")?.addEventListener("click", e => {
-    e.preventDefault();
+  // Кнопка загрузки в попапе профиля
+  $("btn-upload-from-profile")?.addEventListener("click", () => {
     if (!Auth.user) {
       Auth.showAuthModal();
       return;
     }
+    // Закрываем попап профиля
+    const pp = $("profile-popup");
+    if (pp) pp.style.display = "none";
     resetUploadProgress();
     openUploadPopup();
   });
+
   $("btn-pick-files")?.addEventListener("click", e => {
     e.stopPropagation();
     input.click();
@@ -1214,7 +1226,6 @@ async function uploadFiles(files) {
   const bar = $("upload-progress");
   bar.style.display = "block";
   for (let i = 0; i < arr.length; i++) {
-    bar.querySelector(".progress-label").textContent = `Загрузка ${i + 1}/${arr.length}: ${arr[i].name}`;
     bar.querySelector(".progress-label").textContent = t("upload.progressFile", { current: i + 1, total: arr.length, name: arr[i].name });
     bar.querySelector(".progress-fill").style.width = `${(i / arr.length) * 100}%`;
     const fd = new FormData(); fd.append("file", arr[i]);
@@ -1260,7 +1271,7 @@ function setupControls() {
   vol?.addEventListener("input", () => {
     audio.volume = vol.value / 100;
     updateRangeFill(vol);
-    syncStateToStorage(); // ← добавь сюда
+    syncStateToStorage();
   });
   if (vol) updateRangeFill(vol);
 
@@ -1274,7 +1285,6 @@ function setupControls() {
 // ── Hotkeys ────────────────────────────────────────────────────────
 function setupHotkeys() {
   document.addEventListener("keydown", e => {
-    // Игнорируем если фокус в инпуте
     if (e.target.matches("input, textarea")) return;
 
     switch (e.code) {
@@ -1322,6 +1332,10 @@ function setupHotkeys() {
 }
 
 // ── Search ─────────────────────────────────────────────────────────
+function onSearch() {
+  loadTracks($("search-input")?.value || "");
+}
+
 function setupSearch() {
   let timer;
   $("search-input")?.addEventListener("input", e => {
@@ -1344,16 +1358,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadLanguage();
   const authed = await Auth.init();
   
-  // Load tracks and playlists for everyone (guest or registered)
   await Promise.all([loadTracks(), loadPlaylists()]);
   setupUpload();
+  setupContextMenu();
   
   setupControls();
   setupSearch();
   setupHotkeys();
   setupNavigation();
   setupSettings();
-  await restoreSession(); // ← перенеси сюда, после загрузки треков
+  await restoreSession();
   handleRoute();
   window.addEventListener("popstate", () => handleRoute());
 });

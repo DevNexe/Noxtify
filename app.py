@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template, abort, send_file
 from flask_cors import CORS
-import os, uuid, time, threading, configparser, secrets, smtplib
+import os, uuid, time, threading, configparser, secrets, smtplib, subprocess
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -107,6 +107,14 @@ def init_db():
             pass # Column already exists
         try:
             con.execute("ALTER TABLE users ADD COLUMN verify_token_exp INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            con.execute("ALTER TABLE tracks ADD COLUMN source TEXT DEFAULT 'local'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            con.execute("ALTER TABLE tracks ADD COLUMN source_url TEXT")
         except sqlite3.OperationalError:
             pass
 
@@ -240,17 +248,30 @@ def extract_metadata(path: Path, user_id: str) -> dict:
             meta["duration"] = int(audio.info.length) if hasattr(audio, "info") else 0
         raw = MutagenFile(path)
         if raw:
-            pics = raw.get("APIC:") or raw.get("APIC:Cover") or \
-                   (raw.pictures[0] if hasattr(raw, "pictures") and raw.pictures else None)
-            if pics:
+            data = None
+            
+            # Try ID3 tags (MP3) - APIC tags can have descriptions in their keys
+            if hasattr(raw, 'keys'):
+                for key in raw.keys():
+                    if key.startswith("APIC:"):
+                        try:
+                            data = raw[key].data
+                            break
+                        except:
+                            continue
+            
+            # Try unified pictures attribute (works for FLAC, OGG, M4A, etc.)
+            if not data and hasattr(raw, "pictures") and raw.pictures:
+                data = raw.pictures[0].data
+            
+            if data:
                 cover_id  = str(uuid.uuid4())
                 cover_dir = COVERS_DIR / user_id
                 cover_dir.mkdir(parents=True, exist_ok=True)
-                data = pics.data if hasattr(pics, "data") else pics
                 (cover_dir / f"{cover_id}.jpg").write_bytes(data)
                 meta["cover"] = cover_id
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug(f"Cover extraction failed for {path}: {e}")
     return meta
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
@@ -441,6 +462,189 @@ def upload_track():
              meta["album"], meta["genre"], meta["duration"], meta["cover"], int(is_public), now)
         )
     return jsonify({"id": track_id, **meta, "public": is_public, "created_at": now}), 201
+
+
+@app.route("/api/v1/tracks/download-spotify", methods=["POST"])
+@auth_required
+def download_spotify_track():
+    """Download single track from Spotify using spotdl (fetches from YouTube Music)"""
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Registration required to download"}), 403
+    
+    data = request.get_json(force=True)
+    spotify_url = data.get("url") or data.get("spotify_url")
+    
+    if not spotify_url:
+        return jsonify({"error": "Spotify URL required"}), 400
+    
+    uid = request.current_user["id"]
+    track_id = str(uuid.uuid4())
+    user_dir = TRACKS_DIR / uid
+    user_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use spotdl to download track
+    # spotdl fetches track metadata from Spotify and audio from YouTube Music
+    try:
+        cmd = [
+            "spotdl",
+            "download",
+            spotify_url,
+            "--output", str(user_dir / "{artist} - {title}.mp3")
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            timeout=cfg.getint("spotify-downloader", "timeout", fallback=600),
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            app.logger.error(f"spotdl stderr: {result.stderr}")
+            return jsonify({"error": f"Download failed: {result.stderr}"[:200]}), 400
+        
+        # Find the downloaded MP3 file
+        mp3_files = list(user_dir.glob("*.mp3"))
+        if not mp3_files:
+            return jsonify({"error": "Download completed but file not found"}), 400
+        
+        # Use the most recently created file
+        downloaded_file = max(mp3_files, key=lambda p: p.stat().st_mtime)
+        
+        # Rename to track_id.mp3
+        output_path = user_dir / f"{track_id}.mp3"
+        downloaded_file.rename(output_path)
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Download timeout (track too large or slow connection)"}), 408
+    except FileNotFoundError:
+        return jsonify({"error": "spotdl not installed. Run: pip install spotdl"}), 500
+    except Exception as e:
+        app.logger.error(f"spotdl error: {e}")
+        return jsonify({"error": f"Download error: {str(e)}"}), 400
+    
+    if not output_path.exists():
+        return jsonify({"error": "Download failed - file not found"}), 400
+    
+    # Extract metadata
+    meta = extract_metadata(output_path, uid)
+    is_public = data.get("public", True)
+    
+    now = int(time.time())
+    with _db_lock, get_db() as con:
+        con.execute(
+            "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, public, created_at, source, source_url) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (track_id, uid, f"{track_id}.mp3", ".mp3", meta["title"], meta["artist"],
+             meta["album"], meta["genre"], meta["duration"], meta["cover"], int(is_public), now, "spotify", spotify_url)
+        )
+    
+    return jsonify({"id": track_id, **meta, "public": is_public, "source": "spotify", "created_at": now}), 201
+
+
+@app.route("/api/v1/playlists/download-spotify", methods=["POST"])
+@auth_required
+def download_spotify_playlist():
+    """Download entire Spotify playlist using spotdl"""
+    if request.current_user.get("is_guest"):
+        return jsonify({"error": "Registration required to download"}), 403
+    
+    data = request.get_json(force=True)
+    spotify_url = data.get("url") or data.get("spotify_url")
+    
+    if not spotify_url:
+        return jsonify({"error": "Spotify URL required"}), 400
+    
+    uid = request.current_user["id"]
+    user_dir = TRACKS_DIR / uid
+    user_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create playlist record
+    playlist_id = str(uuid.uuid4())
+    playlist_name = data.get("name", "Imported Playlist")
+    now = int(time.time())
+    
+    # Download playlist
+    try:
+        cmd = [
+            "spotdl",
+            "download",
+            spotify_url,
+            "--output", str(user_dir / "{artist} - {title}.mp3")
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            timeout=cfg.getint("spotify-downloader", "timeout", fallback=1800),
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            app.logger.error(f"spotdl stderr: {result.stderr}")
+            return jsonify({"error": f"Download failed: {result.stderr}"[:200]}), 400
+        
+        # Find all newly created MP3 files
+        mp3_files = list(user_dir.glob("*.mp3"))
+        if not mp3_files:
+            return jsonify({"error": "Download completed but no files found"}), 400
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Download timeout (playlist too large)"}), 408
+    except FileNotFoundError:
+        return jsonify({"error": "spotdl not installed. Run: pip install spotdl"}), 500
+    except Exception as e:
+        app.logger.error(f"spotdl error: {e}")
+        return jsonify({"error": f"Download error: {str(e)}"}), 400
+    
+    # Create playlist in DB and add tracks
+    track_ids = []
+    with _db_lock, get_db() as con:
+        con.execute(
+            "INSERT INTO playlists (id, user_id, name, public, created_at) VALUES (?,?,?,?,?)",
+            (playlist_id, uid, playlist_name, 0, now)
+        )
+        
+        position = 0
+        for mp3_file in mp3_files:
+            try:
+                track_id = str(uuid.uuid4())
+                
+                # Extract metadata
+                meta = extract_metadata(mp3_file, uid)
+                
+                # Rename file
+                output_path = user_dir / f"{track_id}.mp3"
+                mp3_file.rename(output_path)
+                
+                # Add to DB
+                con.execute(
+                    "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, public, created_at, source, source_url) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (track_id, uid, f"{track_id}.mp3", ".mp3", meta["title"], meta["artist"],
+                     meta["album"], meta["genre"], meta["duration"], meta["cover"], 0, now, "spotify", spotify_url)
+                )
+                
+                # Add to playlist
+                con.execute(
+                    "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?,?,?)",
+                    (playlist_id, track_id, position)
+                )
+                
+                track_ids.append(track_id)
+                position += 1
+            except Exception as e:
+                app.logger.error(f"Error processing track {mp3_file}: {e}")
+                continue
+    
+    return jsonify({
+        "playlist_id": playlist_id,
+        "name": playlist_name,
+        "tracks_count": len(track_ids),
+        "tracks": track_ids,
+        "source": "spotify",
+        "source_url": spotify_url
+    }), 201
 
 
 @app.route("/api/v1/tracks/<track_id>", methods=["PATCH"])
@@ -716,16 +920,17 @@ def stream_track(track_id):
 
 
 @app.route("/api/v1/download/<track_id>")
-@auth_required
+@optional_auth
 def download_track(track_id):
     with _db_lock, get_db() as con:
         row = con.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
     if not row:
         abort(404)
         
-    uid = request.current_user["id"]
-    is_guest = request.current_user.get("is_guest", False)
+    uid = request.current_user["id"] if request.current_user else None
+    is_guest = request.current_user.get("is_guest", False) if request.current_user else True
     
+    # Гости могут скачивать любые треки, но зарегистрированные пользователи могут скачивать только свои или публичные
     if not is_guest and row["user_id"] != uid:
         with _db_lock, get_db() as con:
             if not is_track_public(con, track_id):

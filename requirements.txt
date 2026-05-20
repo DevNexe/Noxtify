@@ -1,0 +1,7 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+mutagen==1.46.0
+bcrypt==4.0.1
+PyJWT==2.8.0
+yt-dlp==2023.10.13
+requests==2.31.0
