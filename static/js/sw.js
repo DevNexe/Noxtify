@@ -1,4 +1,4 @@
-const CACHE = "noxtify-v5";
+const CACHE = "noxtify-v6";
 
 self.addEventListener("install", e => {
   self.skipWaiting();
@@ -12,17 +12,27 @@ self.addEventListener("activate", e => {
 });
 
 self.addEventListener("fetch", e => {
+  // Обрабатываем только http/https запросы
+  if (!e.request.url.startsWith("http")) return;
+
   const url = new URL(e.request.url);
-  
-  // Всё из /static/ и /api/ — всегда с сервера, без кэша
-  if (url.pathname.startsWith("/static/") || url.pathname.startsWith("/api/")) {
-    e.respondWith(fetch(e.request));
-    return;
-  }
-  
-  // HTML страницы — тоже без кэша
-  if (e.request.mode === "navigate") {
-    e.respondWith(fetch(e.request));
-    return;
+
+  // /static/, /api/ и navigate — network-first с fallback
+  if (
+    url.pathname.startsWith("/static/") ||
+    url.pathname.startsWith("/api/") ||
+    e.request.mode === "navigate"
+  ) {
+    e.respondWith(
+      fetch(e.request).catch(() => {
+        if (e.request.mode === "navigate") {
+          return new Response(
+            "<html><body><p style='font-family:sans-serif;padding:20px'>Нет подключения</p></body></html>",
+            { headers: { "Content-Type": "text/html" } }
+          );
+        }
+        return new Response("", { status: 503 });
+      })
+    );
   }
 });

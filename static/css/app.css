@@ -16,7 +16,7 @@ input { font: inherit; }
   --t2:      #888888;
   --t3:      #555555;
   --border:  rgba(255,255,255,0.06);
-  --sidebar: 64px;
+  --sidebar: 56px;
   --topbar:  56px;
   --radius:  8px;
   --player: 78px;
@@ -194,9 +194,11 @@ body {
 #sidebar {
   border-radius: 10px;
   margin: 8px 0 8px 8px;
+  padding-top: 6px;
   width: var(--sidebar);
   background: var(--s1);
   border: 1px solid var(--border);
+  padding-bottom: 6px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -570,12 +572,10 @@ body {
   color: var(--t3);
   font-size: 18px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 4px;
-  opacity: 0;
+  border-radius: 8px;
   transition: opacity .15s, color .15s;
   padding: 4px;
 }
-.track-row:hover .tr-menu { opacity: 1; }
 .tr-menu:hover { color: var(--t1); background: var(--s4); }
 
 /* ── Drop zone ── */
@@ -724,7 +724,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   transition: color .15s, transform .1s;
 }
-.ctrl-md:hover { color: var(--accent2); transform: scale(1.05); }
+.ctrl-md:hover { color: var(--accent2); }
 
 .ctrl-play {
   width: 36px; height: 36px;
@@ -735,7 +735,7 @@ body {
   transition: background .15s, transform .1s;
   flex-shrink: 0;
 }
-.ctrl-play:hover { background: var(--accent2); color: #fff; transform: scale(1.06); }
+.ctrl-play:hover { background: var(--accent2); color: #fff; }
 
 .progress-row {
   display: flex;
@@ -951,7 +951,9 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     position: relative;
     justify-content: flex-start;
     margin: 8px 0 8px 8px;
+    padding-top: 6px;
     width: var(--sidebar);
+    padding-bottom: 6px;
     transform: none;
     opacity: 1;
     box-shadow: none;
@@ -1034,11 +1036,13 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
     position: fixed;
     left: 8px;
     top: 8px;
+    padding-top: 6px;
     bottom: 8px;
     width: 260px;
     justify-content: flex-start;
     margin: 0;
     z-index: 1000;
+    padding-bottom: 6px;
     transform: translateX(calc(-100% - 20px));
     opacity: 1;
     pointer-events: none;
@@ -1092,16 +1096,22 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
 
   /* Track table becomes compact */
   .track-header {
-    grid-template-columns: 30px 1fr 30px;
-    gap: 6px;
-    padding: 0 6px 6px;
-    font-size: 10px;
+      display: grid !important;
+      grid-template-columns: 40px 464px 32px !important;
+      gap: 8px !important;
+      padding: 6px 6px !important;
+      align-items: center;
+      border-bottom: none;
+      grid-auto-flow: column;
   }
 
   .track-row {
-    grid-template-columns: 30px 1fr 30px;
     gap: 6px;
     padding: 4px 6px;
+  }
+
+  .progress-row {
+    width: 75%;
   }
 
   .tr-cover {
@@ -1196,14 +1206,14 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
-/* ── MOBILE COMPACT (≤480px) ── */
+/* ── MOBILE COMPACT (Ipad/Tablet Mode style for Mobile) ── */
 /* ════════════════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 480px) {
   :root {
     --sidebar: 0px;
     --topbar: 52px;
-    --player: 64px;
+    --player: 72px;
   }
 
   html, body {
@@ -1211,41 +1221,13 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   }
 
   #topbar {
-    margin: 0;
-    border-radius: 0;
-    padding: 0 8px;
-    padding-left: 4px;
-    gap: 6px;
-    height: var(--topbar);
-  }
-
-  .topbar-left {
-    gap: 2px;
-  }
-
-  .nav-arrow {
-    width: 28px;
-    height: 28px;
-    font-size: 18px;
-  }
-
-  .hamburger-btn {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    color: var(--accent2);
-    border-radius: 20px;
-    transition: background .15s, border-color .15s;
-    background: none;
-    position: relative;
+    margin: 8px;
     border-radius: 10px;
-    padding: 0px 11px;
-    gap: 12px;
-    white-space: nowrap;
+    padding: 0 10px;
+    gap: 8px;
+    height: var(--topbar);
+    border: 1px solid var(--border);
   }
-
 
   .search-wrap {
     max-width: 100%;
@@ -1254,362 +1236,296 @@ input[type=range]:focus::-webkit-slider-thumb { opacity: 1; }
   }
 
   #search-input {
-    font-size: 12px;
-    padding: 6px 12px 6px 32px;
+    font-size: 13px;
+    padding: 7px 12px 7px 34px;
     border-radius: 20px;
   }
 
   .search-icon {
     width: 14px;
     height: 14px;
-    left: 10px;
+    left: 12px;
   }
 
-  .topbar-right {
-    gap: 6px;
-  }
-
-  .avatar {
-    width: 26px;
-    height: 26px;
-    font-size: 10px;
-  }
-
-  /* Sidebar mobile overlay */
   #sidebar {
     position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 240px;
+    left: 8px;
+    top: 8px;
+    bottom: 8px;
+    width: 250px;
     margin: 0;
-    z-index: 50;
-    border-radius: 0;
-    border: none;
-    transform: translateX(-100%);
-    opacity: 0;
-    transition: transform .3s ease, opacity .3s ease;
-    background: var(--s1);
+    z-index: 1050;
+    border-radius: 12px;
+    transform: translateX(calc(-100% - 20px));
+    opacity: 1;
+    transition: transform .3s ease;
+    border: 1px solid var(--border);
     pointer-events: none;
   }
 
   #sidebar.mobile-open {
     transform: translateX(0);
-    opacity: 1;
     pointer-events: auto;
-    padding-top: 0px;
-    padding-bottom: 5px;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
-  }
-
-  .sidebar-icon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .sidebar-icon[data-tip]::after {
-    display: none;
-  }
-
-  #layout {
-    flex-direction: column;
+    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.6);
   }
 
   #main {
-    margin: 0;
+    margin: 8px;
+    margin-top: 0;
     padding: 12px;
-    border-radius: 0;
-    border: none;
+    border-radius: 10px;
+    border: 1px solid var(--border);
   }
 
-  .section {
-    margin-bottom: 24px;
-  }
-
-  .section-title {
-    font-size: 18px;
-    margin-bottom: 2px;
-  }
-
-  .section-sub {
-    font-size: 11px;
-    margin-bottom: 12px;
-  }
-
-  /* Recents grid mobile */
   .recents-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
   }
 
-  .recent-card {
-    border-radius: 8px;
-  }
-
-  .recent-info {
-    padding: 8px 10px;
-  }
-
-  .recent-title {
-    font-size: 12px;
-  }
-
-  .recent-artist {
-    font-size: 11px;
-  }
-
-  /* Track table mobile - simplified */
-  .track-header {
-    display: none;
+  /* ── ТАБЛИЦА ТРЕКОВ: Выравнивание строго в 1 линию ── */
+  .track-header, .track-row {
+      display: grid !important;
+      grid-template-columns: 24px 150px 32px !important;
+      gap: 8px !important;
+      padding: 6px 6px !important;
+      align-items: center;
+      border-bottom: none;
+      grid-auto-flow: column;
   }
 
   .track-row {
-    grid-template-columns: 1fr;
-    gap: 0;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: 6px;
+    margin-bottom: 2px;
   }
 
-  .track-row:hover {
-    background: transparent;
+  .track-row:hover { background: var(--s2); }
+  .track-row.active { background: rgb(82 82 107 / 12%); }
+
+  /* Скрываем колонку лайка, чтобы дать максимум места строке */
+  .c-like {
+    display: none !important;
   }
 
-  .track-row.active {
-    background: transparent;
-  }
-
-  .tr-cover-wrap {
-    gap: 10px;
-    margin-bottom: 6px;
-  }
-
-  .tr-cover {
-    width: 44px;
-    height: 44px;
-  }
-
-  .tr-title {
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .tr-artist {
+  /* Заставляем внутренние элементы стоять в ряд */
+  .c-num {
+    display: flex !important;
+    justify-content: center;
+    color: var(--t3);
     font-size: 11px;
   }
 
-  .tr-dur,
-  .tr-like,
-  .tr-menu {
-    display: none;
+  /* ФИКС: Элемент с названием и автором принудительно делаем однострочным */
+  .track-row .c-info {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    min-width: 0 !important; /* Запрещаем контейнеру расширять колонку грида */
+    width: 100% !important;
+    overflow: hidden !important;
   }
 
-  .tr-num {
-    display: none;
+  /* Правила для названия и автора внутри .c-info */
+  .track-row .c-info > * {
+    display: block !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0 !important; /* Обязательно для работы троеточия у дочерних элементов */
   }
 
-  /* Player bar mobile */
-  #player-bar {
-    margin: 0;
-    border-radius: 0;
-    height: var(--player);
-    gap: 6px;
-    padding: 0 6px;
-    border: none;
+  /* Название трека (первый элемент) */
+  .track-row .c-info > *:first-child {
+    flex: 0 1 auto !important;
+    max-width: 55% !important; /* Ограничиваем, чтобы автору всегда оставалось место */
+    color: var(--t1);
   }
 
-  #player-bar.visible {
-    margin-bottom: 0;
+  /* Автор (второй элемент) */
+  .track-row .c-info > *:last-child {
+    flex: 1 1 auto !important;
+    color: var(--t2);
+    font-size: 12px;
+  }
+  
+  /* Разделитель между названием и автором (если нужен) */
+  .track-row .c-info > *:last-child::before {
+    content: "• ";
+    margin-right: 3px;
   }
 
-  .np-left {
-    flex: 0 0 100px;
-    gap: 6px;
+  .c-dur {
+    display: flex !important;
+    justify-content: flex-end;
+    color: var(--t2);
+    font-size: 12px;
   }
 
-  .np-cover {
-    width: 40px;
-    height: 40px;
-  }
-
-  .np-meta {
-    display: none;
-  }
-
-  .like-btn {
-    display: none;
-  }
-
-  .player-center {
-    flex: 1;
-    gap: 2px;
-  }
-
-  .ctrl-row {
-    gap: 4px;
-    width: 100%;
+  .c-menu {
+    display: flex !important;
     justify-content: center;
   }
 
-  .ctrl-sm {
-    padding: 4px;
-    font-size: 14px;
+  /* ── Нижня панель плеера ── */
+
+  #player-bar {
+    position: fixed;
+    margin: 8px;
+    border-radius: 12px;
+    height: auto !important; /* Высота подстроится сама под 2 строки */
+    min-height: 84px;
+    border: 1px solid var(--border);
+    background: var(--s1);
+    padding: 10px 12px !important;
+    
+    /* Только ROW и перенос строк */
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px 0 !important; /* 12px между строками */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
-  .ctrl-md {
-    padding: 4px;
-    font-size: 16px;
+  #player-bar.visible {
+    margin-bottom: 8px;
+  }
+
+  /* Раскрываем центральный контейнер, чтобы таймлайн стал соседом кнопок в flex-сетке */
+  .player-center {
+    display: contents !important;
+  }
+
+  /* [СТРОКА 1 - ЛЕВО]: Обложка и Метаданные */
+  .np-left {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex: 1 1 calc(100% - 130px) !important;
+    min-width: 0 !important;
+    order: 1 !important;
+  }
+
+  .np-cover {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .np-meta {
+    display: flex !important;
+    flex-direction: row !important; /* Убрали column! Название и автор в линию */
+    align-items: center !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+  }
+
+  #np-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--t1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+  }
+
+  #np-artist {
+    font-size: 12px;
+    color: var(--t2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    max-width: 45%; /* Чтобы автор не выдавил название */
+  }
+
+  /* Разделитель между названием и автором */
+  #np-artist::before {
+    content: "• ";
+    margin-right: 2px;
+    color: var(--t3);
+  }
+
+  /* [СТРОКА 1 - ПРАВО]: Кнопки */
+  .ctrl-row {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex: 0 0 auto !important;
+    order: 2 !important;
   }
 
   .ctrl-play {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
   }
 
+  /* [СТРОКА 2 - ЛЕВО]: Таймлайн */
   .progress-row {
-    display: none;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex: 1 1 calc(100% - 90px) !important;
+    min-width: 0 !important;
+    order: 3 !important;
   }
 
+  .progress-row span {
+    display: inline !important;
+    font-size: 10px !important;
+    color: var(--t3) !important;
+    font-family: monospace;
+    min-width: 28px;
+  }
+
+  .progress-row input[type="range"] {
+    flex: 1 !important;
+    height: 4px !important;
+    accent-color: var(--accent2) !important;
+  }
+
+  /* [СТРОКА 2 - ПРАВО]: Громкость */
   .player-right {
-    display: none;
+    display: flex !important;
+    flex-direction: row !important; /* Строго ROW */
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    flex: 0 0 80px !important; /* Фиксированная ширина под ползунок */
+    order: 2 !important;
   }
 
-  /* Modal mobile */
-  .modal-backdrop {
-    padding: 12px;
+  .player-right svg {
+    width: 14px !important;
+    height: 14px !important;
+    color: var(--t2) !important;
+    flex-shrink: 0;
   }
 
-  .modal {
-    width: 100%;
-    padding: 16px;
-    border-radius: 12px;
+  .player-right input[type="range"] {
+    display: block !important;
+    width: 100% !important;
+    height: 4px !important;
+    accent-color: var(--accent2) !important;
   }
 
-  .modal-header h3 {
-    font-size: 15px;
+  #layout.player-visible {
+    margin-bottom: 56px;
   }
 
-  .modal-field {
-    margin-bottom: 10px;
-    font-size: 12px;
-  }
-
-  .modal-field input,
-  .modal-field select {
-    padding: 8px 10px;
-    font-size: 14px;
-  }
-
-  .btn-primary,
-  .btn-outline {
-    padding: 10px 16px;
-    font-size: 12px;
-  }
-
-  .modal-actions {
-    gap: 8px;
-  }
-
-  /* Drop zone mobile */
-  #drop-zone {
-    padding: 32px 16px;
-  }
-
-  #drop-zone p {
-    font-size: 14px;
-  }
-
-  #drop-zone small {
-    font-size: 11px;
-  }
-
-  /* Toast mobile */
-  #toast-container {
-    bottom: calc(var(--player) + 4px);
-    right: 4px;
-    left: 4px;
-  }
-
-  .toast {
-    padding: 8px 12px;
-    font-size: 11px;
-    border-radius: 6px;
-  }
-
-  /* Playlist cards mobile */
-  .playlist-card {
-    border-radius: 10px;
-    padding: 12px;
-    margin-bottom: 4px;
-  }
-
-  .playlist-title {
-    font-size: 13px;
-  }
-
-  .playlist-sub {
-    font-size: 12px;
-  }
-
-  /* Track filters mobile */
-  .track-filters {
-    flex-direction: column;
-    gap: 8px;
-    margin: 8px 0 12px;
-  }
-
-  .track-filters label {
-    min-width: auto;
-    font-size: 11px;
-  }
-
-  .track-filters select {
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-
-  /* Empty state mobile */
-  .empty-state {
-    padding: 48px 16px;
-  }
-
-  .empty-state p {
-    font-size: 14px;
-  }
-
-  .empty-state small {
-    font-size: 12px;
-  }
-
-  /* Context menu mobile */
-  #ctx-menu {
-    min-width: 140px;
-    font-size: 12px;
-  }
-
-  .ctx-item {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .ctx-item svg {
-    width: 16px;
-    height: 16px;
-  }
-}
-
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* ── ANIMATIONS ── */
-/* ════════════════════════════════════════════════════════════════════════════ */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  /* Модалки и фильтры */
+  .modal-backdrop { padding: 16px; }
+  .modal { width: 100%; padding: 20px; border-radius: 14px; }
+  #toast-container { bottom: calc(var(--player) + 16px); right: 8px; left: 8px; }
+  .track-filters { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .track-filters label { min-width: calc(50% - 4px); }
 }
 
 @keyframes fadeOut {
