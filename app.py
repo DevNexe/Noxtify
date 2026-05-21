@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template, abort, send_file
 from flask_cors import CORS
-import os, uuid, time, threading, configparser, secrets, smtplib, subprocess
+import os, re, uuid, time, threading, configparser, secrets, smtplib, socket, subprocess, urllib.error, urllib.request, urllib.parse, imghdr
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from mutagen import File as MutagenFile
+import requests
+from yt_dlp import YoutubeDL
 import sqlite3
 import bcrypt
 import jwt as pyjwt
@@ -115,6 +117,10 @@ def init_db():
             pass
         try:
             con.execute("ALTER TABLE tracks ADD COLUMN source_url TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            con.execute("ALTER TABLE playlists ADD COLUMN cover TEXT")
         except sqlite3.OperationalError:
             pass
 
@@ -236,6 +242,293 @@ def send_verification_email(to_email: str, username: str, code: str):
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
+def _find_cover_url(raw) -> str | None:
+    if not hasattr(raw, "tags") or not raw.tags:
+        return None
+    urls = []
+    for key, frame in raw.tags.items():
+        if not frame:
+            continue
+        if hasattr(frame, "url"):
+            text = str(frame.url)
+        else:
+            text = str(frame)
+        if not text or "http" not in text.lower():
+            continue
+        found = re.findall(r"https?://[^\s'\"]+", text)
+        for url in found:
+            if re.search(r"\.(jpe?g|png|webp|gif)(?:[?#]|$)", url, re.I):
+                return url
+            if key.lower().startswith("wxxx") or key.lower().startswith("woar") or "cover" in key.lower() or "art" in key.lower():
+                return url
+            urls.append(url)
+    return urls[0] if urls else None
+
+
+def _fetch_image_from_url(url: str) -> bytes | None:
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content_type = resp.headers.get("Content-Type", "").lower()
+            if content_type and not content_type.startswith("image/"):
+                return None
+            data = resp.read(5 * 1024 * 1024 + 1)
+            if len(data) > 5 * 1024 * 1024:
+                return None
+            if not imghdr.what(None, data):
+                return None
+            return data
+    except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, ValueError) as e:
+        app.logger.debug(f"Cover URL fetch failed for {url}: {e}")
+        return None
+
+
+def _save_cover_from_url(url: str, user_id: str) -> str | None:
+    data = _fetch_image_from_url(url)
+    if not data:
+        return None
+    cover_id = str(uuid.uuid4())
+    cover_dir = COVERS_DIR / user_id
+    cover_dir.mkdir(parents=True, exist_ok=True)
+    (cover_dir / f"{cover_id}.jpg").write_bytes(data)
+    return cover_id
+
+SPOTIFY_OEMBED_URL = "https://open.spotify.com/oembed"
+SPOTIFY_URL_RE = re.compile(r"(?:https?://open\.spotify\.com/|spotify:)(track|playlist)[:/](?P<id>[A-Za-z0-9]+)")
+SPOTIFY_TRACK_LINK_RE = re.compile(r'/track/([A-Za-z0-9]+)')
+SPOTIFY_TRACK_URI_RE = re.compile(r'spotify:track:([A-Za-z0-9]+)')
+
+
+def _normalize_spotify_url(url: str) -> str:
+    if not url:
+        return ""
+    url = url.strip()
+    if url.startswith("spotify:"):
+        parts = url.split(":")
+        if len(parts) >= 3:
+            return f"https://open.spotify.com/{parts[1]}/{parts[2].split('?')[0]}"
+    return url.split("?")[0]
+
+
+def _spotify_url_type(url: str) -> tuple[str, str] | None:
+    url = _normalize_spotify_url(url)
+    match = SPOTIFY_URL_RE.match(url)
+    if not match:
+        return None
+    return match.group(1), match.group("id")
+
+
+def _fetch_spotify_oembed(url: str) -> dict | None:
+    try:
+        resp = requests.get(SPOTIFY_OEMBED_URL, params={"url": url}, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.RequestException as e:
+        app.logger.debug(f"Spotify oEmbed failed for {url}: {e}")
+    return None
+
+
+import html as _html
+
+def _spotify_track_query_from_url(url: str) -> dict | None:
+    url = _normalize_spotify_url(url)
+    parsed = _spotify_url_type(url)
+    if not parsed or parsed[0] != "track":
+        return None
+
+    # Prefer oEmbed for lightweight metadata
+    data = _fetch_spotify_oembed(url)
+    title = (data.get("title", "").strip() if data else "")
+    artist = (data.get("author_name", "").strip() if data else "")
+    genre = ""
+    image_url = None
+    duration = 0
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if resp.status_code == 200:
+            html_text = resp.text
+
+            og_image = re.search(r'<meta[^>]+property=[\'\"]og:image[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+            twitter_image = re.search(r'<meta[^>]+name=[\'\"]twitter:image[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+            image_url = (og_image.group(1).strip() if og_image else None) or (twitter_image.group(1).strip() if twitter_image else None)
+
+            duration_meta = re.search(r'<meta[^>]+name=[\'\"]music:duration[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+            if duration_meta:
+                try:
+                    duration = int(duration_meta.group(1).strip())
+                except ValueError:
+                    duration = 0
+
+            genre_meta = re.search(r'<meta[^>]+name=[\'\"]music:genre[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+            if genre_meta:
+                genre = genre_meta.group(1).strip()
+
+            m = re.search(r'<meta[^>]+name=[\'\"]description[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+            desc = m.group(1).strip() if m else None
+
+            if not title:
+                og_title = re.search(r'<meta[^>]+property=[\'\"]og:title[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]', html_text, re.I)
+                title = og_title.group(1).strip() if og_title else title
+
+            if desc:
+                parts = [p.strip() for p in desc.split('·') if p.strip()]
+                if len(parts) >= 2 and not artist:
+                    artist = parts[1]
+
+
+            if not title or not artist:
+                for candidate in (desc, title):
+                    if not candidate:
+                        continue
+                    candidate = _html.unescape(candidate)
+                    m_by = re.match(r'^(?P<title>.+) by (?P<artist>.+?) on Spotify', candidate, re.I)
+                    if m_by:
+                        title = title or m_by.group('title').strip()
+                        artist = artist or m_by.group('artist').strip()
+                        break
+                    for sep in [' — ', ' – ', ' - ', ' • ', '·', '•']:
+                        if sep in candidate:
+                            parts = [p.strip() for p in candidate.split(sep) if p.strip()]
+                            if len(parts) >= 2:
+                                first, second = parts[0], parts[1]
+                                if not title and not artist:
+                                    if re.search(r'feat\.|ft\.|,', first, re.I):
+                                        artist = first
+                                        title = second
+                                    else:
+                                        title = second
+                                        artist = first
+                                elif not title:
+                                    title = second
+                                elif not artist:
+                                    artist = first
+                                break
+                        if title and artist:
+                            break
+    except requests.RequestException as e:
+        app.logger.debug(f"Spotify page scrape failed for {url}: {e}")
+
+    if not title or not artist:
+        return None
+
+    return {
+        "title": title,
+        "artist": artist,
+        "genre": genre,
+        "duration": duration,
+        "image_url": image_url,
+        "query": f"{artist} - {title}"
+    }
+
+
+def _clean_spotify_playlist_name(name: str) -> str:
+    name = _html.unescape((name or "").strip())
+    if not name:
+        return ""
+    name = re.sub(r"^\s*(?:playlist|spotify playlist)\s*[·•:-]\s*", "", name, flags=re.I)
+    name = re.sub(r"\s*(?:\||-)\s*Spotify\s*$", "", name, flags=re.I)
+    name = re.sub(r"\s+on Spotify\s*$", "", name, flags=re.I)
+    name = re.sub(r"\s*-\s*playlist by .*$", "", name, flags=re.I)
+    return name.strip()
+
+
+def _spotify_playlist_name_from_url(url: str) -> str | None:
+    url = _normalize_spotify_url(url)
+    parsed = _spotify_url_type(url)
+    if not parsed or parsed[0] != "playlist":
+        return None
+
+    data = _fetch_spotify_oembed(url)
+    name = _clean_spotify_playlist_name(data.get("title", "") if data else "")
+    if name:
+        return name
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if resp.status_code != 200:
+            return None
+        html_text = resp.text
+        for pattern in (
+            r'<meta[^>]+property=[\'\"]og:title[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]',
+            r'<meta[^>]+name=[\'\"]twitter:title[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]',
+            r"<title[^>]*>(.*?)</title>",
+        ):
+            match = re.search(pattern, html_text, re.I | re.S)
+            name = _clean_spotify_playlist_name(match.group(1) if match else "")
+            if name:
+                return name
+    except requests.RequestException as e:
+        app.logger.debug(f"Spotify playlist name parse failed for {url}: {e}")
+    return None
+
+
+def _get_spotify_playlist_track_urls(url: str) -> list[str]:
+    url = _normalize_spotify_url(url)
+    parsed = _spotify_url_type(url)
+    if not parsed or parsed[0] != "playlist":
+        return []
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+        if resp.status_code != 200:
+            return []
+        text = resp.text
+        track_ids = []
+        for tid in SPOTIFY_TRACK_LINK_RE.findall(text) + SPOTIFY_TRACK_URI_RE.findall(text):
+            if tid not in track_ids:
+                track_ids.append(tid)
+        return [f"https://open.spotify.com/track/{tid}" for tid in track_ids]
+    except requests.RequestException as e:
+        app.logger.debug(f"Spotify playlist parse failed for {url}: {e}")
+    return []
+
+
+def _download_audio_search(track_id: str, query: str, user_dir: Path) -> Path | None:
+    if not query:
+        return None
+    user_dir.mkdir(parents=True, exist_ok=True)
+    search_variants = [query, f"{query} audio", f"{query} official audio", f"{query} lyrics"]
+    search_providers = [
+        ("YouTube", "ytsearch1:"),
+        ("SoundCloud", "scsearch1:"),
+    ]
+    for search_text in search_variants:
+        for provider_name, prefix in search_providers:
+            search_query = prefix + search_text
+            output_template = str(user_dir / f"{track_id}.%(ext)s")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": output_template,
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "ignoreerrors": True,
+                "source_address": "0.0.0.0",
+            }
+            try:
+                with YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(search_query, download=True)
+                if not info:
+                    continue
+                if isinstance(info, dict) and info.get("entries"):
+                    info = next((item for item in info["entries"] if item), None)
+                if not info:
+                    continue
+                if info.get("requested_downloads"):
+                    file_path = info["requested_downloads"][0].get("filepath")
+                    if file_path and Path(file_path).exists():
+                        return Path(file_path)
+                candidates = list(user_dir.glob(f"{track_id}.*"))
+                if candidates:
+                    return max(candidates, key=lambda p: p.stat().st_mtime)
+            except Exception as e:
+                app.logger.debug(f"Audio search failed for {query} on {provider_name}: {e}")
+                continue
+    return None
+
+
 def extract_metadata(path: Path, user_id: str) -> dict:
     meta = {"title": path.stem, "artist": "Unknown", "album": "Unknown", "genre": "Unknown", "duration": 0, "cover": None}
     try:
@@ -250,20 +543,24 @@ def extract_metadata(path: Path, user_id: str) -> dict:
         if raw:
             data = None
             
-            # Try ID3 tags (MP3) - APIC tags can have descriptions in their keys
+            # Try embedded image first
             if hasattr(raw, 'keys'):
                 for key in raw.keys():
                     if key.startswith("APIC:"):
                         try:
                             data = raw[key].data
                             break
-                        except:
+                        except Exception:
                             continue
-            
-            # Try unified pictures attribute (works for FLAC, OGG, M4A, etc.)
             if not data and hasattr(raw, "pictures") and raw.pictures:
                 data = raw.pictures[0].data
-            
+
+            # If no embedded cover, try a remote cover URL from tags
+            if not data:
+                cover_url = _find_cover_url(raw)
+                if cover_url:
+                    data = _fetch_image_from_url(cover_url)
+
             if data:
                 cover_id  = str(uuid.uuid4())
                 cover_dir = COVERS_DIR / user_id
@@ -467,7 +764,7 @@ def upload_track():
 @app.route("/api/v1/tracks/download-spotify", methods=["POST"])
 @auth_required
 def download_spotify_track():
-    """Download single track from Spotify using spotdl (fetches from YouTube Music)"""
+    """Download single track from Spotify using Spotify metadata and yt-dlp search."""
     if request.current_user.get("is_guest"):
         return jsonify({"error": "Registration required to download"}), 403
     
@@ -482,60 +779,42 @@ def download_spotify_track():
     user_dir = TRACKS_DIR / uid
     user_dir.mkdir(parents=True, exist_ok=True)
     
-    # Use spotdl to download track
-    # spotdl fetches track metadata from Spotify and audio from YouTube Music
-    try:
-        cmd = [
-            "spotdl",
-            "download",
-            spotify_url,
-            "--output", str(user_dir / "{artist} - {title}.mp3")
-        ]
-        
-        result = subprocess.run(
-            cmd,
-            timeout=cfg.getint("spotify-downloader", "timeout", fallback=600),
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            app.logger.error(f"spotdl stderr: {result.stderr}")
-            return jsonify({"error": f"Download failed: {result.stderr}"[:200]}), 400
-        
-        # Find the downloaded MP3 file
-        mp3_files = list(user_dir.glob("*.mp3"))
-        if not mp3_files:
-            return jsonify({"error": "Download completed but file not found"}), 400
-        
-        # Use the most recently created file
-        downloaded_file = max(mp3_files, key=lambda p: p.stat().st_mtime)
-        
-        # Rename to track_id.mp3
-        output_path = user_dir / f"{track_id}.mp3"
+    track_info = _spotify_track_query_from_url(spotify_url)
+    if not track_info:
+        return jsonify({"error": "Failed to parse Spotify track metadata"}), 400
+    
+    downloaded_file = _download_audio_search(track_id, track_info["query"], user_dir)
+    if not downloaded_file:
+        return jsonify({"error": "Track not found on YouTube or fallback services"}), 404
+    
+    output_path = user_dir / f"{track_id}{downloaded_file.suffix}"
+    if downloaded_file != output_path:
         downloaded_file.rename(output_path)
-        
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Download timeout (track too large or slow connection)"}), 408
-    except FileNotFoundError:
-        return jsonify({"error": "spotdl not installed. Run: pip install spotdl"}), 500
-    except Exception as e:
-        app.logger.error(f"spotdl error: {e}")
-        return jsonify({"error": f"Download error: {str(e)}"}), 400
     
     if not output_path.exists():
         return jsonify({"error": "Download failed - file not found"}), 400
     
-    # Extract metadata
     meta = extract_metadata(output_path, uid)
+    meta["title"] = track_info.get("title") or meta["title"]
+    meta["artist"] = track_info.get("artist") or meta["artist"]
+    if not meta["duration"] and track_info.get("duration"):
+        meta["duration"] = track_info["duration"]
+    if track_info.get("genre"):
+        meta["genre"] = track_info["genre"]
+    elif not meta["genre"] or meta["genre"] == "Unknown":
+        meta["genre"] = ""
+    if not meta["cover"] and track_info.get("image_url"):
+        cover_id = _save_cover_from_url(track_info["image_url"], uid)
+        if cover_id:
+            meta["cover"] = cover_id
     is_public = data.get("public", True)
-    
+
     now = int(time.time())
     with _db_lock, get_db() as con:
         con.execute(
             "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, public, created_at, source, source_url) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (track_id, uid, f"{track_id}.mp3", ".mp3", meta["title"], meta["artist"],
+            (track_id, uid, output_path.name, output_path.suffix, meta["title"], meta["artist"],
              meta["album"], meta["genre"], meta["duration"], meta["cover"], int(is_public), now, "spotify", spotify_url)
         )
     
@@ -545,7 +824,7 @@ def download_spotify_track():
 @app.route("/api/v1/playlists/download-spotify", methods=["POST"])
 @auth_required
 def download_spotify_playlist():
-    """Download entire Spotify playlist using spotdl"""
+    """Download entire Spotify playlist using Spotify metadata and yt-dlp search."""
     if request.current_user.get("is_guest"):
         return jsonify({"error": "Registration required to download"}), 403
     
@@ -559,87 +838,91 @@ def download_spotify_playlist():
     user_dir = TRACKS_DIR / uid
     user_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create playlist record
     playlist_id = str(uuid.uuid4())
-    playlist_name = data.get("name", "Imported Playlist")
+    playlist_name = (data.get("name") or "").strip()
+    if not playlist_name:
+        playlist_name = _spotify_playlist_name_from_url(spotify_url) or "Spotify Playlist"
     now = int(time.time())
     
-    # Download playlist
-    try:
-        cmd = [
-            "spotdl",
-            "download",
-            spotify_url,
-            "--output", str(user_dir / "{artist} - {title}.mp3")
-        ]
-        
-        result = subprocess.run(
-            cmd,
-            timeout=cfg.getint("spotify-downloader", "timeout", fallback=1800),
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            app.logger.error(f"spotdl stderr: {result.stderr}")
-            return jsonify({"error": f"Download failed: {result.stderr}"[:200]}), 400
-        
-        # Find all newly created MP3 files
-        mp3_files = list(user_dir.glob("*.mp3"))
-        if not mp3_files:
-            return jsonify({"error": "Download completed but no files found"}), 400
-        
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Download timeout (playlist too large)"}), 408
-    except FileNotFoundError:
-        return jsonify({"error": "spotdl not installed. Run: pip install spotdl"}), 500
-    except Exception as e:
-        app.logger.error(f"spotdl error: {e}")
-        return jsonify({"error": f"Download error: {str(e)}"}), 400
+    track_urls = _get_spotify_playlist_track_urls(spotify_url)
+    if not track_urls:
+        return jsonify({"error": "Could not parse Spotify playlist tracks"}), 400
     
-    # Create playlist in DB and add tracks
     track_ids = []
     with _db_lock, get_db() as con:
         con.execute(
             "INSERT INTO playlists (id, user_id, name, public, created_at) VALUES (?,?,?,?,?)",
-            (playlist_id, uid, playlist_name, 0, now)
+            (playlist_id, uid, playlist_name, 1, now)
         )
         
         position = 0
-        for mp3_file in mp3_files:
+        for track_url in track_urls:
+            track_info = _spotify_track_query_from_url(track_url)
+            if not track_info:
+                app.logger.debug(f"Skipping playlist track with missing metadata: {track_url}")
+                continue
             try:
                 track_id = str(uuid.uuid4())
+                downloaded_file = _download_audio_search(track_id, track_info["query"], user_dir)
+                if not downloaded_file:
+                    app.logger.debug(f"Skipping playlist track not found: {track_info['query']}")
+                    continue
+                output_path = user_dir / f"{track_id}{downloaded_file.suffix}"
+                if downloaded_file != output_path:
+                    downloaded_file.rename(output_path)
                 
-                # Extract metadata
-                meta = extract_metadata(mp3_file, uid)
-                
-                # Rename file
-                output_path = user_dir / f"{track_id}.mp3"
-                mp3_file.rename(output_path)
-                
-                # Add to DB
+                meta = extract_metadata(output_path, uid)
+                meta["title"] = track_info.get("title") or meta["title"]
+                meta["artist"] = track_info.get("artist") or meta["artist"]
+                if not meta["duration"] and track_info.get("duration"):
+                    meta["duration"] = track_info["duration"]
+                if track_info.get("genre"):
+                    meta["genre"] = track_info["genre"]
+                elif not meta["genre"] or meta["genre"] == "Unknown":
+                    meta["genre"] = ""
+                if not meta["cover"] and track_info.get("image_url"):
+                    cover_id = _save_cover_from_url(track_info["image_url"], uid)
+                    if cover_id:
+                        meta["cover"] = cover_id
+
+                # Insert track as public (imported from spotify)
                 con.execute(
                     "INSERT INTO tracks (id, user_id, filename, ext, title, artist, album, genre, duration, cover, public, created_at, source, source_url) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (track_id, uid, f"{track_id}.mp3", ".mp3", meta["title"], meta["artist"],
-                     meta["album"], meta["genre"], meta["duration"], meta["cover"], 0, now, "spotify", spotify_url)
+                    (track_id, uid, output_path.name, output_path.suffix, meta["title"], meta["artist"],
+                     meta["album"], meta["genre"], meta["duration"], meta["cover"], 1, now, "spotify", spotify_url)
                 )
-                
-                # Add to playlist
+                # Track playlist cover: prefer first available track cover
+                try:
+                    if not locals().get('first_cover') and meta.get('cover'):
+                        first_cover = meta.get('cover')
+                except Exception:
+                    first_cover = meta.get('cover') if meta.get('cover') else None
                 con.execute(
                     "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?,?,?)",
                     (playlist_id, track_id, position)
                 )
-                
                 track_ids.append(track_id)
                 position += 1
             except Exception as e:
-                app.logger.error(f"Error processing track {mp3_file}: {e}")
+                app.logger.error(f"Error processing playlist track {track_url}: {e}")
                 continue
     
+    if not track_ids:
+        return jsonify({"error": "No tracks were downloaded from the playlist"}), 400
+    # If we captured a cover from playlist tracks, update playlist record
+    try:
+        if 'first_cover' in locals() and first_cover:
+            with _db_lock, get_db() as con:
+                con.execute("UPDATE playlists SET cover=? WHERE id=?", (first_cover, playlist_id))
+    except Exception as e:
+        app.logger.debug(f"Failed to set playlist cover: {e}")
+
     return jsonify({
         "playlist_id": playlist_id,
+        "id": playlist_id,
         "name": playlist_name,
+        "public": True,
         "tracks_count": len(track_ids),
         "tracks": track_ids,
         "source": "spotify",
@@ -795,7 +1078,15 @@ def update_playlist(pl_id):
             abort(404)
         name   = data.get("name", pl["name"]).strip() or pl["name"]
         public = int(bool(data.get("public", pl["public"])))
-        con.execute("UPDATE playlists SET name=?, public=? WHERE id=?", (name, public, pl_id))
+        # Allow updating cover as well
+        fields = [name, public]
+        sql = "UPDATE playlists SET name=?, public=?"
+        if "cover" in data:
+            sql += ", cover=?"
+            fields.append(data.get("cover"))
+        sql += " WHERE id=?"
+        fields.append(pl_id)
+        con.execute(sql, tuple(fields))
         updated = row_to_dict(con.execute("SELECT * FROM playlists WHERE id=?", (pl_id,)).fetchone())
         updated["tracks"] = [r[0] for r in con.execute(
             "SELECT track_id FROM playlist_tracks WHERE playlist_id=? ORDER BY position", (pl_id,)

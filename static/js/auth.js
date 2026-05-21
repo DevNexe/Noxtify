@@ -32,6 +32,9 @@ const Auth = {
   // ────── Initialization ──────────────────────────────────────────────────────
   async init() {
     localStorage.setItem("noxtify_user_id", this.guestId);
+    if (this.token) {
+      document.cookie = `token=${this.token}; Path=/; SameSite=Lax`;
+    }
     await this._loadAuthConfig();
     if (this.token) {
       const loaded = await this._loadUserFromToken();
@@ -269,6 +272,7 @@ const Auth = {
     this.isGuest = false;
     localStorage.setItem("noxtify_token", token);
     localStorage.setItem("noxtify_user", JSON.stringify(user));
+    document.cookie = `token=${token}; Path=/; SameSite=Lax`;
     this._updateUI();
   },
 
@@ -278,6 +282,7 @@ const Auth = {
     this.isGuest = true;
     localStorage.removeItem("noxtify_token");
     localStorage.removeItem("noxtify_user");
+    document.cookie = "token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
     this._updateUI();
   },
 

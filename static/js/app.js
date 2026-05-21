@@ -3,7 +3,7 @@ const S = {
   tracks: [], queue: [], qi: -1,
   playing: false, shuffle: false, repeat: "none",
   likedIds: new Set(JSON.parse(localStorage.getItem("liked") || "[]")),
-  playlists: [], page: "tracks", currentPlaylist: null, editTargetId: null,
+  playlists: [], publicPlaylists: [], page: "tracks", currentPlaylist: null, editTargetId: null,
   filters: { artist: "", genre: "" }, allTracks: [],
 };
 
@@ -64,8 +64,29 @@ const api = {
     const r = await fetch("/api/v1/tracks", { method: "POST", headers: getAuthHeaders(), body: fd });
     return r.json();
   },
+  async downloadSpotify(url, isPlaylist = false) {
+    const endpoint = isPlaylist ? "/api/v1/playlists/download-spotify" : "/api/v1/tracks/download-spotify";
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const payload = await r.json();
+    if (!r.ok) throw new Error(payload.error || `HTTP ${r.status}`);
+    return payload;
+  },
   async getPlaylists() {
     const r = await fetch("/api/v1/playlists", { headers: getAuthHeaders() });
+    return r.json();
+  },
+  async getPublicPlaylists(q = "") {
+    const params = new URLSearchParams({ q, limit: "100" });
+    const r = await fetch(`/api/v1/playlists/public?${params.toString()}`, { headers: getAuthHeaders() });
+    return r.json();
+  },
+  async getPlaylist(id) {
+    const r = await fetch(`/api/v1/playlists/${id}`, { headers: getAuthHeaders() });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   },
   async createPlaylist(name) {
@@ -74,6 +95,26 @@ const api = {
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ name })
     });
+    return r.json();
+  },
+  async updatePlaylist(id, data) {
+    const r = await fetch(`/api/v1/playlists/${id}`, {
+      method: "PATCH",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+  async deletePlaylist(id) {
+    const r = await fetch(`/api/v1/playlists/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+    if (!r.ok) {
+      const error = await r.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP ${r.status}`);
+    }
     return r.json();
   },
   async recordPlay(track_id) {
@@ -215,6 +256,12 @@ function applyTranslations() {
   }
   const progressLabel = $("upload-progress")?.querySelector(".progress-label");
   if (progressLabel && $("upload-progress").style.display !== "block") progressLabel.textContent = t("upload.progress");
+
+  setText("spotify-download-title-modal", "upload.spotifyTitle");
+  const spotifyInput = $("spotify-url-modal");
+  if (spotifyInput) spotifyInput.placeholder = t("upload.spotifyPlaceholder");
+  const spotifyButton = $("btn-download-spotify-modal");
+  if (spotifyButton) spotifyButton.textContent = t("upload.spotifyButton");
 
   document.querySelector("#metadata-form .btn-primary")?.replaceChildren(document.createTextNode(t("metadata.save")));
 
@@ -516,7 +563,30 @@ function getFavoriteTracks() {
 function getPlaylistTracks(playlist) {
   if (!playlist) return [];
   if (playlist.id === "favorites") return getFavoriteTracks();
+  if (Array.isArray(playlist.track_objects) && playlist.track_objects.length) return playlist.track_objects;
   return libraryTracks().filter(tr => playlist.tracks?.includes(tr.id));
+}
+
+function allVisiblePlaylists() {
+  const ownIds = new Set(S.playlists.map(pl => pl.id));
+  return [
+    ...S.playlists.map(pl => ({ ...pl, _isOwn: true })),
+    ...S.publicPlaylists
+      .filter(pl => !ownIds.has(pl.id))
+      .map(pl => ({ ...pl, _isPublicDiscovery: true }))
+  ];
+}
+
+function canModifyPlaylist(playlist) {
+  if (!playlist || playlist.id === "favorites" || Auth.isGuest) return false;
+  return playlist._isOwn || S.playlists.some(pl => pl.id === playlist.id) || (Auth.user && playlist.user_id === Auth.user.id);
+}
+
+function playlistCoverMarkup(playlist) {
+  const cover = playlist?.cover || playlist?.track_objects?.find(tr => tr.cover)?.cover;
+  const url = api.cover(cover);
+  if (url) return `<img src="${url}" alt="" loading="lazy"/>`;
+  return '<svg xmlns="http://www.w3.org/2000/svg" height="34px" viewBox="0 -960 960 960" width="34px" fill="#666666"><path d="M500-360q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29ZM120-160v-640h720v640H120Zm80-80h560v-480H200v480Zm0 0v-480 480Z"/></svg>';
 }
 
 function renderFilters() {
@@ -559,12 +629,22 @@ function showSection(section) {
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (!el) return;
-    el.style.display = key === section ? "" : "none";
+    const isActive = key === section;
+    el.classList.remove("section-enter");
+    el.style.display = isActive ? "" : "none";
+    if (isActive) {
+      requestAnimationFrame(() => el.classList.add("section-enter"));
+    }
   });
   const recent = $("section-recents");
   if (recent) {
-    recent.style.display = section === "tracks" && isHomeRoute() ? "" : "none";
-    if (section === "tracks" && isHomeRoute()) renderRecentCards();
+    const showRecent = section === "tracks" && isHomeRoute();
+    recent.classList.remove("section-enter");
+    recent.style.display = showRecent ? "" : "none";
+    if (showRecent) {
+      requestAnimationFrame(() => recent.classList.add("section-enter"));
+      renderRecentCards();
+    }
   }
   S.page = section;
   updateSidebarActive(section);
@@ -624,31 +704,51 @@ function renderPlaylists() {
   const list = $("playlist-list");
   if (!list) return;
   const favCount = getFavoriteTracks().length;
+  const visiblePlaylists = allVisiblePlaylists();
   const cards = [`
     <div class="playlist-card" data-id="favorites">
-      <div class="playlist-title">${t("playlists.favorites")}</div>
+      <div class="playlist-card-cover">${playlistCoverMarkup({ id: "favorites", track_objects: getFavoriteTracks() })}</div>
+      <button class="playlist-card-menu" type="button" data-id="favorites" aria-label="Playlist menu">⋯</button>
+      <div class="playlist-title"><span class="playlist-title-text">${t("playlists.favorites")}</span></div>
       <div class="playlist-sub">${favCount} ${trackWord(favCount)}</div>
     </div>
   `];
-  cards.push(...S.playlists.map(pl => `
+  cards.push(...visiblePlaylists.map(pl => {
+    const count = pl.tracks?.length || pl.track_objects?.length || 0;
+    const owner = pl._isPublicDiscovery && pl.username ? ` - ${esc(pl.username)}` : "";
+    const badge = pl._isPublicDiscovery ? `<span class="playlist-badge">Public</span>` : "";
+    return `
     <div class="playlist-card" data-id="${pl.id}">
-      <div class="playlist-title">${esc(pl.name)}</div>
-      <div class="playlist-sub">${pl.tracks.length} ${trackWord(pl.tracks.length)}</div>
+      <div class="playlist-card-cover">${playlistCoverMarkup(pl)}</div>
+      <button class="playlist-card-menu" type="button" data-id="${pl.id}" aria-label="Playlist menu">...</button>
+      <div class="playlist-title"><span class="playlist-title-text">${esc(pl.name)}</span>${badge}</div>
+      <div class="playlist-sub">${count} ${trackWord(count)}${owner}</div>
     </div>
-  `));
+  `;
+  }));
   list.innerHTML = cards.join("");
   list.querySelectorAll(".playlist-card").forEach(card => {
     card.addEventListener("click", () => {
       if (card.dataset.id === "favorites") { openFavorites(); return; }
-      const pl = S.playlists.find(x => x.id === card.dataset.id);
+      const pl = allVisiblePlaylists().find(x => x.id === card.dataset.id);
       if (pl) openPlaylistView(pl);
+    });
+  });
+  list.querySelectorAll(".playlist-card-menu").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      openPlaylistCtxMenu(btn.dataset.id, btn);
     });
   });
 }
 
 async function loadPlaylists() {
-  const res = await api.getPlaylists();
-  S.playlists = (res && res.playlists) || [];
+  const [ownRes, publicRes] = await Promise.all([
+    api.getPlaylists().catch(() => ({ playlists: [] })),
+    api.getPublicPlaylists().catch(() => ({ playlists: [] }))
+  ]);
+  S.playlists = (ownRes && ownRes.playlists) || [];
+  S.publicPlaylists = (publicRes && publicRes.playlists) || [];
   renderPlaylists();
 }
 
@@ -658,18 +758,25 @@ function navigateTo(path, replace = false) {
   handleRoute(path);
 }
 
-function handleRoute(path = location.pathname) {
+async function handleRoute(path = location.pathname) {
   const normalized = path.replace(/\/+$/, "");
   if (normalized === "" || normalized === "/") { showSection("tracks"); return; }
   if (normalized === "/playlists") { openLibrary(true); return; }
   if (normalized === "/playlists/favorite") { openFavorites(true); return; }
   if (normalized === "/history") { openHistory(true); return; }
-  const match = normalized.match(/^\/playlists\/([a-f0-9]{4}(?:-[a-f0-9]{4}){4})$/i);
+  const match = normalized.match(/^\/playlists\/([a-f0-9-]{20,36})$/i);
   if (match) {
     const id = match[1];
-    const pl = id === "favorites"
+    let pl = id === "favorites"
       ? { id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(tr => tr.id) }
-      : S.playlists.find(x => x.id === id);
+      : allVisiblePlaylists().find(x => x.id === id);
+    if (!pl && id !== "favorites") {
+      try {
+        pl = await api.getPlaylist(id);
+      } catch (error) {
+        console.warn("Failed to load playlist route:", error);
+      }
+    }
     if (pl) { openPlaylistView(pl, true); return; }
   }
   showSection("tracks");
@@ -700,9 +807,13 @@ function openHistory(replace = false) {
 function openPlaylistView(playlist, replace = false) {
   S.currentPlaylist = playlist;
   showSection("playlist");
-  $("playlist-name").textContent = playlist.name;
   const tracks = getPlaylistTracks(playlist);
-  $("playlist-count").textContent = `${tracks.length} ${trackWord(tracks.length)}`;
+  const countText = `${tracks.length} ${trackWord(tracks.length)}`;
+  $("playlist-name").textContent = playlist.name;
+  $("playlist-count").textContent = countText;
+  if ($("playlist-name-modern")) $("playlist-name-modern").textContent = playlist.name;
+  if ($("playlist-count-modern")) $("playlist-count-modern").textContent = countText;
+  if ($("playlist-detail-cover")) $("playlist-detail-cover").innerHTML = playlistCoverMarkup({ ...playlist, track_objects: tracks });
   renderTracks(tracks, "playlist-track-list");
   const route = playlist.id === "favorites" ? "/playlists/favorite" : `/playlists/${playlist.id}`;
   if (replace) history.replaceState(null, "", route);
@@ -823,6 +934,64 @@ async function submitMetadataForm(event) {
   toast("Сохранено");
 }
 
+function openPlaylistEditModal(playlist) {
+  if (!canModifyPlaylist(playlist)) return;
+  S.playlistEditTargetId = playlist.id;
+  $("playlist-edit-name").value = playlist.name || "";
+  renderPlaylistCoverChoices(playlist);
+  $("playlist-edit-backdrop")?.classList.add("open");
+}
+
+function closePlaylistEditModal() {
+  $("playlist-edit-backdrop")?.classList.remove("open");
+  S.playlistEditTargetId = null;
+}
+
+function renderPlaylistCoverChoices(playlist) {
+  const wrap = $("playlist-edit-covers");
+  if (!wrap) return;
+  const tracks = getPlaylistTracks(playlist).filter(tr => tr.cover).slice(0, 4);
+  if (!tracks.length) {
+    wrap.innerHTML = `<span class="playlist-cover-empty">No covers available</span>`;
+    return;
+  }
+  wrap.innerHTML = tracks.map((track, index) => `
+    <button type="button" class="playlist-cover-choice${playlist.cover === track.cover || (!playlist.cover && index === 0) ? " active" : ""}" data-cover="${escAttr(track.cover)}">
+      <img src="${api.cover(track.cover)}" alt="" loading="lazy"/>
+    </button>
+  `).join("");
+  wrap.querySelectorAll(".playlist-cover-choice").forEach(btn => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll(".playlist-cover-choice").forEach(item => item.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+}
+
+async function submitPlaylistEditForm(event) {
+  event.preventDefault();
+  const playlist = findPlaylistById(S.playlistEditTargetId);
+  if (!playlist || !canModifyPlaylist(playlist)) return;
+  const selectedCover = $("playlist-edit-covers")?.querySelector(".playlist-cover-choice.active")?.dataset.cover;
+  const payload = {
+    name: $("playlist-edit-name").value.trim() || playlist.name,
+    public: playlist.public !== 0
+  };
+  if (selectedCover) payload.cover = selectedCover;
+  try {
+    const updated = await api.updatePlaylist(playlist.id, payload);
+    await loadPlaylists();
+    if (S.currentPlaylist?.id === playlist.id) {
+      S.currentPlaylist = { ...playlist, ...updated };
+      openPlaylistView(S.currentPlaylist, true);
+    }
+    closePlaylistEditModal();
+    toast("Playlist saved");
+  } catch (error) {
+    toast(`Save failed: ${error.message || "unknown error"}`, "error");
+  }
+}
+
 function setupNavigation() {
   $("nav-home")?.addEventListener("click", () => navigateTo("/"));
   $("nav-library")?.addEventListener("click", openLibrary);
@@ -830,6 +999,7 @@ function setupNavigation() {
   $("nav-history")?.addEventListener("click", openHistory);
   $("btn-back")?.addEventListener("click", () => window.history.back());
   $("btn-fwd")?.addEventListener("click", () => window.history.forward());
+  $("btn-back-to-playlists-modern")?.addEventListener("click", openLibrary);
   $("btn-back-to-playlists")?.addEventListener("click", openLibrary);
   $("btn-new-playlist")?.addEventListener("click", async () => {
     if (Auth.isGuest) { Auth.showAuthModal(); return; }
@@ -845,6 +1015,25 @@ function setupNavigation() {
   $("btn-metadata-cancel")?.addEventListener("click", closeMetadataModal);
   $("modal-backdrop")?.addEventListener("click", e => {
     if (e.target === $("modal-backdrop")) closeMetadataModal();
+  });
+  $("playlist-edit-form")?.addEventListener("submit", submitPlaylistEditForm);
+  $("btn-playlist-edit-cancel")?.addEventListener("click", closePlaylistEditModal);
+  $("playlist-edit-backdrop")?.addEventListener("click", e => {
+    if (e.target === $("playlist-edit-backdrop")) closePlaylistEditModal();
+  });
+  $("btn-confirm-delete-cancel")?.addEventListener("click", closeDeleteConfirm);
+  $("confirm-delete-backdrop")?.addEventListener("click", e => {
+    if (e.target === $("confirm-delete-backdrop")) closeDeleteConfirm();
+  });
+  $("btn-confirm-delete-ok")?.addEventListener("click", async () => {
+    const action = confirmDeleteAction;
+    if (!action) return closeDeleteConfirm();
+    try {
+      await action();
+      closeDeleteConfirm();
+    } catch (error) {
+      toast(`Delete failed: ${error.message || "unknown error"}`, "error");
+    }
   });
 }
 
@@ -893,22 +1082,71 @@ function toggleLike(id) {
 }
 
 // ── Context menu ───────────────────────────────────────────────────
+let confirmDeleteAction = null;
+
+function openDeleteConfirm({ title, message, onConfirm }) {
+  confirmDeleteAction = onConfirm;
+  const backdrop = $("confirm-delete-backdrop");
+  if (!backdrop) return;
+  $("confirm-delete-title").textContent = title || "Delete item?";
+  $("confirm-delete-message").textContent = message || "This action cannot be undone.";
+  backdrop.classList.add("open");
+}
+
+function closeDeleteConfirm() {
+  confirmDeleteAction = null;
+  $("confirm-delete-backdrop")?.classList.remove("open");
+}
+
+function placeContextMenu(menu, anchor) {
+  const rect = anchor.getBoundingClientRect();
+  menu.classList.add("open");
+  const menuRect = menu.getBoundingClientRect();
+  const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - menuRect.height - 8));
+  const left = Math.max(8, Math.min(rect.right - menuRect.width, window.innerWidth - menuRect.width - 8));
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
 let ctxTarget = null;
+let playlistCtxTarget = null;
 
 function openCtxMenu(trackId, anchor) {
   if (!trackId) return;
   ctxTarget = trackId;
   const menu = $("ctx-menu");
-  const rect = anchor.getBoundingClientRect();
-  menu.style.top  = (rect.top  - menu.offsetHeight - 8 + window.scrollY) + "px";
-  menu.style.left = (rect.left - 120) + "px";
-  menu.classList.add("open");
+  closePlaylistCtxMenu();
+  placeContextMenu(menu, anchor);
   setTimeout(() => document.addEventListener("click", e => {
     if (!menu.contains(e.target)) closeCtxMenu();
   }, { once: true }), 0);
 }
 
 function closeCtxMenu() { $("ctx-menu").classList.remove("open"); ctxTarget = null; }
+
+function findPlaylistById(id) {
+  if (id === "favorites") return { id: "favorites", name: t("playlists.favorites"), tracks: getFavoriteTracks().map(tr => tr.id) };
+  return allVisiblePlaylists().find(pl => pl.id === id);
+}
+
+function openPlaylistCtxMenu(playlistId, anchor) {
+  const playlist = findPlaylistById(playlistId);
+  if (!playlist) return;
+  playlistCtxTarget = playlistId;
+  const menu = $("playlist-ctx-menu");
+  closeCtxMenu();
+  $("pcm-edit")?.classList.toggle("hidden", !canModifyPlaylist(playlist));
+  $("pcm-delete")?.classList.toggle("hidden", !canModifyPlaylist(playlist));
+  placeContextMenu(menu, anchor);
+  setTimeout(() => document.addEventListener("click", e => {
+    if (!menu.contains(e.target)) closePlaylistCtxMenu();
+  }, { once: true }), 0);
+}
+
+function closePlaylistCtxMenu() {
+  $("playlist-ctx-menu")?.classList.remove("open");
+  playlistCtxTarget = null;
+}
 
 function openAddToPlaylistPopup(trackId) {
   ctxTarget = trackId;
@@ -965,6 +1203,62 @@ $("add-playlist-backdrop")?.addEventListener("click", e => {
 });
 
 function setupContextMenu() {
+  $("cm-delete")?.addEventListener("click", e => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (Auth.isGuest) { Auth.showAuthModal(); return; }
+    if (!ctxTarget) return;
+    const track = findTrackById(ctxTarget);
+    if (!track) return;
+    const trackId = ctxTarget;
+    closeCtxMenu();
+    openDeleteConfirm({
+      title: "Delete track?",
+      message: `Delete "${track.title}" from your library? This action cannot be undone.`,
+      onConfirm: async () => {
+        await api.del(trackId);
+        await loadTracks();
+        toast("Track deleted");
+      }
+    });
+  }, true);
+
+  $("pcm-open")?.addEventListener("click", () => {
+    const playlist = findPlaylistById(playlistCtxTarget);
+    if (playlist) openPlaylistView(playlist);
+    closePlaylistCtxMenu();
+  });
+
+  $("pcm-play")?.addEventListener("click", () => {
+    const playlist = findPlaylistById(playlistCtxTarget);
+    const tracks = getPlaylistTracks(playlist);
+    if (tracks.length) setQueue([...tracks], 0);
+    closePlaylistCtxMenu();
+  });
+
+  $("pcm-edit")?.addEventListener("click", () => {
+    const playlist = findPlaylistById(playlistCtxTarget);
+    if (!playlist || !canModifyPlaylist(playlist)) return;
+    closePlaylistCtxMenu();
+    openPlaylistEditModal(playlist);
+  });
+
+  $("pcm-delete")?.addEventListener("click", () => {
+    const playlist = findPlaylistById(playlistCtxTarget);
+    if (!playlist || !canModifyPlaylist(playlist)) return;
+    closePlaylistCtxMenu();
+    openDeleteConfirm({
+      title: "Delete playlist?",
+      message: `Delete "${playlist.name}"? Tracks will stay in your library.`,
+      onConfirm: async () => {
+        await api.deletePlaylist(playlist.id);
+        if (S.currentPlaylist?.id === playlist.id) openLibrary(true);
+        await loadPlaylists();
+        toast("Playlist deleted");
+      }
+    });
+  });
+
   $("cm-play")?.addEventListener("click", () => {
     if (!ctxTarget) return;
     const tracks = libraryTracks();
@@ -993,7 +1287,7 @@ function setupContextMenu() {
     openAddToPlaylistPopup(ctxTarget);
   });
 
-  $("cm-delete")?.addEventListener("click", async () => {
+  $("cm-delete-old-disabled")?.addEventListener("click", async () => {
     if (Auth.isGuest) { Auth.showAuthModal(); return; }
     if (!ctxTarget) return;
     const track = findTrackById(ctxTarget);
@@ -1049,6 +1343,38 @@ function setupUpload() {
     uploadFiles(e.dataTransfer.files);
   });
   input.addEventListener("change", () => uploadFiles(input.files));
+  $("btn-open-spotify-download")?.addEventListener("click", () => {
+    $("spotify-download-backdrop")?.classList.add("open");
+  });
+  $("spotify-download-backdrop")?.addEventListener("click", e => {
+    if (e.target === $("spotify-download-backdrop")) {
+      $("spotify-download-backdrop")?.classList.remove("open");
+    }
+  });
+  $("btn-download-spotify-modal")?.addEventListener("click", async () => {
+    if (typeof Auth !== "undefined" && !Auth.user) { Auth.showAuthModal(); return; }
+    const url = $("spotify-url-modal")?.value.trim();
+    if (!url) {
+      toast(t("upload.spotifyInvalid"), "error");
+      return;
+    }
+    const isPlaylist = /(?:spotify:playlist:|open\.spotify\.com\/playlist\/)/i.test(url);
+    const button = $("btn-download-spotify-modal");
+    button.disabled = true;
+    const originalText = button.textContent;
+    button.textContent = t("upload.spotifyLoading");
+    try {
+      await api.downloadSpotify(url, isPlaylist);
+      toast(isPlaylist ? t("upload.spotifyPlaylistLoaded") : t("upload.spotifyTrackLoaded"));
+      await Promise.all([loadTracks(), loadPlaylists()]);
+      $("spotify-download-backdrop")?.classList.remove("open");
+    } catch (error) {
+      toast(error.message || t("upload.spotifyError"), "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  });
 
   document.body.addEventListener("dragover", e => { e.preventDefault(); openUploadPopup(); zone.classList.add("drag-over"); });
   document.body.addEventListener("dragleave", e => { if (!e.relatedTarget) zone.classList.remove("drag-over"); });

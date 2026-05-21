@@ -9,8 +9,20 @@
 </section>
 
 <section class="section" id="section-playlist" style="display:none">
+  <div class="playlist-detail-header">
+    <button class="playlist-back-btn" id="btn-back-to-playlists-modern" aria-label="Back to playlists">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 18l-6-6 6-6"></path>
+      </svg>
+    </button>
+    <div class="playlist-detail-cover" id="playlist-detail-cover"></div>
+    <div class="playlist-detail-meta">
+      <h2 class="section-title" id="playlist-name-modern">Playlist</h2>
+      <p class="section-sub" id="playlist-count-modern">0 tracks</p>
+    </div>
+  </div>
   <div class="playlist-header">
-    <button class="btn-link" id="btn-back-to-playlists">← Плейлисты</button>
+    <button class="btn-link" id="btn-back-to-playlists"></button>
     <div>
       <h2 class="section-title" id="playlist-name">Плейлист</h2>
       <p class="section-sub" id="playlist-count">0 треков</p>
@@ -75,6 +87,8 @@
     </div>
   </div>
 
+  <div id="search-playlists" class="playlist-search-results" style="margin-top:12px"></div>
+
   <div class="track-table">
     <div class="track-header">
       <span class="c-num">#</span>
@@ -123,4 +137,3 @@
   <span class="ctx-text">Удалить</span>
 </div>
 {% endblock %}
-
